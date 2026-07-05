@@ -73,7 +73,6 @@ src/shared/
     ├── event-bus/                # CQRS + DomainEvent — infra
     ├── persistence/typeorm/      # TypeORM root config — infra
     ├── feature-gate/             # @Gate decorator + GateGuard — presentation/infra
-    ├── tenant/                   # TenantContext — presentation
     └── request-context/          # RequestContext middleware + RequestIdentity — presentation
 ```
 
@@ -269,7 +268,7 @@ Both commands and queries remain behind `@Gate()` — gating is orthogonal to CQ
                          ▼
 ┌─ AUTH BC (modules/auth/) ───────────────────────────────────┐
 │  AuthGuard validates: JWT (Bearer) or API Key (X-API-Key)    │
-│  → extracts identity { userId, tenantId, roles }             │
+│  → extracts identity { userId, roles }             │
 │  → writes to RequestContext                                  │
 │  → passes through if valid, rejects if invalid               │
 ├──────────────────────────────────────────────────────────────┤
@@ -417,7 +416,6 @@ export const AUTH_MIDDLEWARE_PORT = 'AUTH_MIDDLEWARE_PORT';
 
 export interface RequestIdentity {
   userId: string;
-  tenantId: string;
   roles: string[];
   authMethod: 'jwt' | 'api_key';
 }
@@ -499,7 +497,7 @@ async createCatalog() { ... }
                        ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  API GATEWAY → AuthGuard (validate JWT or API Key)           │
-│    → identity { userId, tenantId, roles }                    │
+│    → identity { userId, roles }                    │
 │      → written to RequestContext                             │
 │        → route handler reads identity from context           │
 │          → domain NEVER touches auth types                   │
@@ -510,7 +508,7 @@ async createCatalog() { ... }
 
 ```
 API Gateway → AuthGuard (validate token/api_key)
-  → extracts identity { userId, tenantId, roles }
+  → extracts identity { userId, roles }
     → attaches to RequestContext
       → controller calls use case
         → use case reads identity from context
@@ -572,6 +570,38 @@ async createCatalog() { ... }
 
 No other bounded context's domain/application code changes when auth strategy changes (JWT → OAuth, API Key rotation). It's purely an auth-context concern.
 
+#### 2.6 Extensible Authorization Model (RBAC/ABAC Ready)
+
+**Basic roles** – Define core role constants used throughout the system:
+
+```ts
+export const ROLE_ADMIN = 'ADMIN';
+export const ROLE_USER = 'USER';
+export const ROLE_SERVICE = 'SERVICE';
+```
+
+**`RequestIdentity` extension** – add optional `attributes` map for ABAC:
+
+```ts
+export interface RequestIdentity {
+  userId: string;
+  roles: string[];
+  authMethod: 'jwt' | 'api_key';
+  attributes?: Record<string, any>; // e.g. tenantId, region, timeOfDay
+}
+```
+
+**RBAC** – `roles` array drives simple role‑based checks via existing `RolesGuard`. Permissions can be derived from roles (e.g. `ADMIN` → all, `USER` → read‑only, `SERVICE` → machine‑to‑machine). Future `PermissionGuard` can map role → permission list.
+
+**ABAC** – `attributes` allow fine‑grained policy evaluation (ownerId, tenantId, geo, time). An `AttributesGuard` can inspect `RequestIdentity.attributes` alongside resource attributes to decide access.
+
+**Future integration** – 
+- **Permission service** – central lookup `role → permissions`. 
+- **Policy engine** – plug in OPA or custom evaluator consuming `attributes`. 
+- **Feature gating** – enable `RBAC`/`ABAC` per feature via config flags (`FEATURE_RBAC`, `FEATURE_ABAC`). 
+
+All existing code that reads `RequestIdentity` remains compatible – the new fields are optional. Controllers and services can start using `@Roles('admin')` or, later, `@Attributes({ tenantId: 'acme' })` without breaking current logic.
+
 ---
 
 ## 3. Bounded Context Inventory
@@ -608,7 +638,6 @@ Per the spec in `docs/User Context — Backend Specification.md`:
 - **UserIdentity entity:** password hash, provider support (email, OAuth)
 - **UserSession entity:** refresh token lifecycle, expiry
 - **Use cases:** GetProfile, UpdateProfile, ChangePassword, RefreshToken
-- **Multi-tenant:** tenantId on all entities, TenantContext filter at repository level
 
 ### 3.3 Product Catalog Context (Phase 2)
 
@@ -665,20 +694,6 @@ src/shared/adapters/feature-gate/
 - **GateGuard (global)** — checks maintenance mode (`API_LOCKED=true`). Blocks all routes when set.
 - **FeatureGateService** — reads from `app.features.*` config path. Hybrid: env-driven now, supports DB override later via merge mechanism.
 - **Config entries:** `FEATURE_USER_PROFILE=true/false`, `FEATURE_PRODUCT_CATALOG=true/false`, etc. Default to `false` until explicitly enabled.
-
-#### TenantContext
-
-```
-src/shared/adapters/tenant/
-├── tenant.module.ts
-├── tenant.service.ts              # Resolves current tenant from request/JWT
-├── tenant.decorator.ts            # @Tenant() param decorator
-└── tenant.interceptor.ts          # Extracts tenant from JWT claim
-```
-
-- Reads tenantId from JWT payload or header
-- Provides `TenantContext` to application layer
-- Repository-level filter via TenantService
 
 #### RequestContext
 
@@ -876,8 +891,7 @@ beforeEach(async () => {
 - FeatureGateModule registered in SharedAdaptersModule
 - Tests for gate disabled → 503, gate enabled → pass-through
 
-#### 1C — TenantContext + RequestContext
-- Tenant module: extract tenantId from JWT/header
+#### 1C — RequestContext
 - RequestContext middleware: requestId + correlationId
 - Register in app.module.ts
 
@@ -1018,7 +1032,6 @@ All errors follow this shape. `code` is always a machine-readable constant. `mes
 | Feature gate bypass | GateGuard runs before all route handlers. Cannot be accidentally skipped. |
 | Cross-context coupling | Ports & Adapters enforce boundaries. No direct imports across contexts. |
 | Build broken during multi-feature dev | Feature gates disabled by default. Code merged but inactive. |
-| Tenant leak | TenantContext injected at request boundary. Repository filter is mandatory. |
 
 ---
 
