@@ -1,0 +1,34 @@
+# Pet E-commerce Server — License Terms
+
+Copyright © 2026 Pet E-commerce
+
+## 1. Commercial Use
+
+Any commercial use of this software requires a **paid license**. Commercial use includes but is not limited to:
+
+- Operating the software as part of a revenue-generating product or service
+- Using the software within any organization that generates revenue
+- Offering the software as a hosted or managed service
+- Bundling the software with any commercial product
+
+Contact the author to obtain a commercial license.
+
+## 2. Non-Commercial Use
+
+Non-commercial, personal, or educational use is permitted free of charge.
+
+## 3. Module / Fork Rule
+
+If you use this software as a **module** (copying, embedding, or adapting any portion of the source code into your own project):
+
+- All modifications to the source must be made **public**
+- The modified work must maintain a visible **fork** relationship to the original repository
+- You must retain this license notice and attribution
+
+## 4. No Warranty
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
+
+## 5. Violation
+
+Unauthorized commercial use or failure to comply with the module/fork rule constitutes a license violation.
