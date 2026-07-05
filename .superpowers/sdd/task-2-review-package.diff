@@ -1,0 +1,20 @@
+diff --git a/backend/src/modules/auth/application/ports/auth-middleware.port.ts b/backend/src/modules/auth/application/ports/auth-middleware.port.ts
+new file mode 100644
+index 0000000..77a6581
+--- /dev/null
++++ b/backend/src/modules/auth/application/ports/auth-middleware.port.ts
+@@ -0,0 +1,14 @@
++export const AUTH_MIDDLEWARE_PORT = 'AUTH_MIDDLEWARE_PORT';
++
++export interface RequestIdentity {
++  userId: string;
++  roles: string[];
++  authMethod: 'jwt' | 'api_key';
++  /** optional ABAC attributes, e.g. tenantId, region, timeOfDay */
++  attributes?: Record<string, any>;
++}
++
++export interface IAuthMiddlewarePort {
++  validateToken(token: string): Promise<RequestIdentity>;
++  validateApiKey(apiKey: string): Promise<RequestIdentity>;
++}
