@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { TypeOrmUserEntity } from './adapters/outbound/persistence/typeorm-user.entity';
 import { UserRepository } from './adapters/outbound/persistence/user.repository';
 import { USER_REPOSITORY } from './domain/ports/user-repository.port';
@@ -11,6 +12,7 @@ import { JwtStrategy } from './adapters/outbound/auth/jwt.strategy';
 import { AuthService } from './application/services/auth.service';
 import { EventBusService } from './application/services/event-bus.service';
 import { AuthController } from './adapters/inbound/controllers/auth.controller';
+import { AttributesGuard } from './adapters/outbound/auth/attributes.guard';
 
 @Module({
   imports: [
@@ -35,6 +37,10 @@ import { AuthController } from './adapters/inbound/controllers/auth.controller';
     {
       provide: USER_REPOSITORY,
       useClass: UserRepository,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: AttributesGuard,
     },
   ],
   exports: [USER_REPOSITORY, AUTH_SERVICE],
