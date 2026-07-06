@@ -1,0 +1,10 @@
+diff --git a/backend/src/modules/auth/adapters/outbound/auth/attributes.decorator.ts b/backend/src/modules/auth/adapters/outbound/auth/attributes.decorator.ts
+new file mode 100644
+index 0000000..30d7a5b
+--- /dev/null
++++ b/backend/src/modules/auth/adapters/outbound/auth/attributes.decorator.ts
+@@ -0,0 +1,4 @@
++import { SetMetadata } from '@nestjs/common';
++
++export const ATTRIBUTES_KEY = 'attributes';
++export const Attributes = (attrs: Record<string, any>) => SetMetadata(ATTRIBUTES_KEY, attrs);
