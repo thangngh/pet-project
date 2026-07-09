@@ -30,6 +30,14 @@ cd backend && pnpm jest -- src/app.controller.spec.ts
 
 # Lint
 cd backend && pnpm lint
+
+# Docker
+docker compose up -d              # Start all PostgreSQL services
+docker compose up -d postgres_auth # Start a specific service
+docker compose down               # Stop all
+docker compose down -v            # Stop and delete volumes (reset data)
+docker compose logs -f            # Follow logs
+docker compose ps                 # Service status
 ```
 
 ## Architecture — Hexagonal (Ports & Adapters) = 4 DDD Layers
