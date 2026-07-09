@@ -2,7 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@n
 import { JwtAuthGuard } from '../../../../auth/adapters/outbound/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../../auth/adapters/outbound/auth/roles.guard';
 import { Roles } from '../../../../auth/adapters/outbound/auth/roles.decorator';
-import { Gate } from '../../../../shared/adapters/feature-gate/gate.decorator';
+import { Gate } from '../../../../../shared/adapters/feature-gate/gate.decorator';
 import { CreateCatalogUseCase } from '../../../application/use-cases/create-catalog.use-case';
 import { UpdateCatalogUseCase } from '../../../application/use-cases/update-catalog.use-case';
 import { ArchiveCatalogUseCase } from '../../../application/use-cases/archive-catalog.use-case';
