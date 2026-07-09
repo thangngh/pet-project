@@ -46,8 +46,15 @@ export default registerAs('app', () => ({
     level: process.env.LOG_LEVEL || 'info',
   },
 
+  gate: {
+    apiLocked: process.env.API_LOCKED === 'true',
+  },
+
   features: {
     rbac: process.env.FEATURE_RBAC === 'true',
     abac: process.env.FEATURE_ABAC === 'true',
+    userProfile: process.env.FEATURE_USER_PROFILE === 'true',
+    productCatalog: process.env.FEATURE_PRODUCT_CATALOG === 'true',
+    shipping: process.env.FEATURE_SHIPPING === 'true',
   },
 }));
