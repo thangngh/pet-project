@@ -28,11 +28,11 @@ export class UpdateProfileUseCase {
       profile.firstName,
       profile.lastName,
       profile.email,
-      profile.phone?.toString(),
-      profile.avatar,
       profile.status,
       profile.createdAt,
       profile.updatedAt,
+      profile.phone?.toString(),
+      profile.avatar,
     );
   }
 }

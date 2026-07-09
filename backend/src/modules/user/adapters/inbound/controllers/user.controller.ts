@@ -1,14 +1,14 @@
 import { Controller, Get, Patch, Body, UseGuards, Post, UnauthorizedException } from '@nestjs/common';
-import { AuthGuard } from '../../../../auth/adapters/outbound/auth/jwt-auth.guard';
-import { Gate } from '../../../../shared/adapters/feature-gate/gate.decorator';
-import { RequestContextService } from '../../../../shared/adapters/request-context/request-context.service';
+import { JwtAuthGuard } from '../../../../auth/adapters/outbound/auth/jwt-auth.guard';
+import { Gate } from '../../../../../shared/adapters/feature-gate/gate.decorator';
+import { RequestContextService } from '../../../../../shared/adapters/request-context/request-context.service';
 import { GetProfileUseCase } from '../../../application/use-cases/get-profile.use-case';
 import { UpdateProfileUseCase } from '../../../application/use-cases/update-profile.use-case';
 import { ChangePasswordUseCase } from '../../../application/use-cases/change-password.use-case';
 import { UpdateProfileDto } from '../../../application/dto/update-profile.dto';
 
 @Controller('api/v1')
-@UseGuards(AuthGuard)
+@UseGuards(JwtAuthGuard)
 export class UserController {
   constructor(
     private readonly getProfile: GetProfileUseCase,
