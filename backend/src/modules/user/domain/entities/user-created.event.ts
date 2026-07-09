@@ -5,6 +5,7 @@ export class UserCreatedEvent extends DomainEvent {
     public readonly userId: string,
     public readonly email: string,
   ) {
-    super('UserCreated');
+    super();
+    (this as any).eventName = 'UserCreated';
   }
 }
