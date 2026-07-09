@@ -20,6 +20,21 @@ export default registerAs('app', () => ({
     database: process.env.DB_DATABASE || 'ddd_project',
     synchronize: process.env.DB_SYNCHRONIZE === 'true',
     logging: process.env.DB_LOGGING === 'true',
+
+    auth: {
+      host: process.env.DB_AUTH_HOST || 'localhost',
+      port: parseInt(process.env.DB_AUTH_PORT, 10) || 5432,
+      username: process.env.DB_AUTH_USERNAME || 'postgres',
+      password: process.env.DB_AUTH_PASSWORD || 'postgres',
+      database: process.env.DB_AUTH_DATABASE || 'ddd_auth',
+    },
+    user: {
+      host: process.env.DB_USER_HOST || 'localhost',
+      port: parseInt(process.env.DB_USER_PORT, 10) || 5433,
+      username: process.env.DB_USER_USERNAME || 'postgres',
+      password: process.env.DB_USER_PASSWORD || 'postgres',
+      database: process.env.DB_USER_DATABASE || 'ddd_user',
+    },
   },
 
   throttle: {
