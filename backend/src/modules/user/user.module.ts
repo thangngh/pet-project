@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CqrsModule } from '@nestjs/cqrs';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TypeOrmUserProfile } from './adapters/outbound/persistence/typeorm-user-profile.entity';
 import { TypeOrmUserSession } from './adapters/outbound/persistence/typeorm-user-session.entity';
@@ -10,10 +11,12 @@ import { GetProfileUseCase } from './application/use-cases/get-profile.use-case'
 import { UpdateProfileUseCase } from './application/use-cases/update-profile.use-case';
 import { ChangePasswordUseCase } from './application/use-cases/change-password.use-case';
 import { UserController } from './adapters/inbound/controllers/user.controller';
+import { UserRegisteredHandler } from './application/handlers/user-registered.handler';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TypeOrmUserProfile, TypeOrmUserSession]),
+    CqrsModule,
   ],
   controllers: [UserController],
   providers: [
@@ -28,6 +31,7 @@ import { UserController } from './adapters/inbound/controllers/user.controller';
     GetProfileUseCase,
     UpdateProfileUseCase,
     ChangePasswordUseCase,
+    UserRegisteredHandler,
   ],
 })
 export class UserModule {}
