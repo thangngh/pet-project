@@ -6,6 +6,7 @@ import { SharedAdaptersModule } from './shared/adapters/shared-adapters.module';
 import { TypeOrmModule } from './shared/adapters/persistence/typeorm/typeorm.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
+import { CatalogModule } from './modules/catalog/catalog.module';
 import { GlobalExceptionFilter } from './shared/application/filters/global-exception.filter';
 import { LoggingInterceptor } from './shared/adapters/logger/logging.interceptor';
 
@@ -15,6 +16,7 @@ import { LoggingInterceptor } from './shared/adapters/logger/logging.interceptor
     TypeOrmModule,
     AuthModule,
     UserModule,
+    CatalogModule,
   ],
   controllers: [AppController],
   providers: [
