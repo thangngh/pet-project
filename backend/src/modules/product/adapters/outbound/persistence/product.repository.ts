@@ -65,8 +65,8 @@ export class ProductRepository implements IProductRepository {
     const attrs = (entity.attributes || []).map(a => new ProductAttribute(a.id, a.name, a.value));
     const media = (entity.media || []).map(m => new ProductMedia(m.id, m.url, m.type as any, m.isPrimary));
     const product = new Product(
-      entity.id, entity.catalogId, entity.name, entity.description,
-      entity.status as any, entity.createdBy, attrs, media,
+      entity.id, entity.catalogId, entity.name, entity.createdBy,
+      entity.description, entity.status as any, attrs, media,
       entity.createdAt, entity.updatedAt, entity.version,
     );
     return product;

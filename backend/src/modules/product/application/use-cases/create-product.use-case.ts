@@ -11,7 +11,7 @@ export class CreateProductUseCase {
   ) {}
 
   async execute(catalogId: string, name: string, createdBy: string, description?: string): Promise<ProductDto> {
-    const product = new Product(uuidv4(), catalogId, name, description, 'draft', createdBy);
+    const product = new Product(uuidv4(), catalogId, name, createdBy, description);
     await this.repo.save(product);
     return new ProductDto(product.id, product.catalogId, product.name, product.status, product.createdBy, product.description);
   }

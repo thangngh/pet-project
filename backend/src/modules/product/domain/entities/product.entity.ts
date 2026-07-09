@@ -4,14 +4,16 @@ import { ProductMedia } from './product-media.entity';
 
 export type ProductStatus = 'draft' | 'published' | 'archived';
 
+export { ProductAttribute, ProductMedia };
+
 export class Product {
   constructor(
     public readonly id: string,
     public catalogId: string,
     public name: string,
+    public readonly createdBy: string,
     public description?: string,
     public status: ProductStatus = 'draft',
-    public readonly createdBy: string,
     public attributes: ProductAttribute[] = [],
     public media: ProductMedia[] = [],
     public readonly createdAt: Date = new Date(),
