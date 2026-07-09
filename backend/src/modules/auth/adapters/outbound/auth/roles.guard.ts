@@ -1,17 +1,29 @@
-import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { ROLES_KEY } from './roles.decorator';
-import { ROLE_ADMIN, ROLE_USER, ROLE_SERVICE } from '../../application/constants/role.constants';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly configService: ConfigService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    if (!this.configService.get<boolean>('app.features.rbac')) {
+      return true;
+    }
+
+    const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     if (!requiredRoles || requiredRoles.length === 0) {
       return true;
@@ -23,7 +35,8 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Access denied');
     }
 
-    const identityRoles = identity.roles || (identity.role ? [identity.role] : []);
+    const identityRoles =
+      identity.roles || (identity.role ? [identity.role] : []);
     const hasRole = requiredRoles.some((role) => identityRoles.includes(role));
     if (!hasRole) {
       throw new ForbiddenException('Insufficient permissions');

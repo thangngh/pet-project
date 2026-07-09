@@ -30,4 +30,9 @@ export default registerAs('app', () => ({
   logging: {
     level: process.env.LOG_LEVEL || 'info',
   },
+
+  features: {
+    rbac: process.env.FEATURE_RBAC === 'true',
+    abac: process.env.FEATURE_ABAC === 'true',
+  },
 }));
