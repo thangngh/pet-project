@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../../auth/adapters/outbound/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../../auth/adapters/outbound/auth/roles.guard';
 import { Roles } from '../../../../auth/adapters/outbound/auth/roles.decorator';
@@ -40,7 +40,7 @@ export class ProductController {
   @UseGuards(RolesGuard) @Roles('admin')
   async create(@Body() dto: CreateProductDto) {
     const userId = this.requestCtx.getIdentity()?.userId;
-    if (!userId) throw new Error('Unauthorized');
+    if (!userId) throw new UnauthorizedException();
     return this.createProduct.execute(dto.catalogId, dto.name, userId, dto.description);
   }
 

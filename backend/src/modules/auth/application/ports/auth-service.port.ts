@@ -31,4 +31,9 @@ export interface IAuthService {
   login(input: LoginInput): Promise<AuthTokens>;
   validateUser(userId: string): Promise<User | null>;
   getProfile(userId: string): Promise<UserProfileOutput>;
+  changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<void>;
 }

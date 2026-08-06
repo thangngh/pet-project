@@ -1,4 +1,5 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { NotFoundError } from '../../../../shared/domain/errors/domain-error';
 import { CATALOG_REPOSITORY, ICatalogRepository } from '../../domain/ports/catalog.repository.port';
 
 @Injectable()
@@ -9,7 +10,7 @@ export class ArchiveCatalogUseCase {
 
   async execute(id: string): Promise<void> {
     const catalog = await this.repo.findById(id);
-    if (!catalog) throw new NotFoundException('Catalog not found');
+    if (!catalog) throw new NotFoundError('Catalog', id);
     catalog.archive();
     await this.repo.save(catalog);
   }

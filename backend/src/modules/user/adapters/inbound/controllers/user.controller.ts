@@ -6,6 +6,7 @@ import { GetProfileUseCase } from '../../../application/use-cases/get-profile.us
 import { UpdateProfileUseCase } from '../../../application/use-cases/update-profile.use-case';
 import { ChangePasswordUseCase } from '../../../application/use-cases/change-password.use-case';
 import { UpdateProfileDto } from '../../../application/dto/update-profile.dto';
+import { ChangePasswordDto } from '../../../application/dto/change-password.dto';
 
 @Controller('api/v1')
 @UseGuards(JwtAuthGuard)
@@ -35,13 +36,14 @@ export class UserController {
 
   @Post('auth/change-password')
   @Gate('userProfile')
-  async changeMyPassword(
-    @Body('oldPassword') oldPw: string,
-    @Body('newPassword') newPw: string,
-  ) {
+  async changeMyPassword(@Body() dto: ChangePasswordDto) {
     const identity = this.requestCtx.getIdentity();
     if (!identity?.userId) throw new UnauthorizedException();
-    await this.changePassword.execute(identity.userId, oldPw, newPw);
+    await this.changePassword.execute(
+      identity.userId,
+      dto.oldPassword,
+      dto.newPassword,
+    );
     return { message: 'Password changed' };
   }
 }

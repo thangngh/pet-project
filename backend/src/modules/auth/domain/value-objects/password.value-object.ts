@@ -1,15 +1,17 @@
+import { ValidationError } from '../../../../shared/domain/errors/domain-error';
+
 export class Password {
   private readonly value: string;
   private readonly hashed: boolean;
 
   constructor(value: string, hashed = false) {
     if (!hashed && !this.isStrongPassword(value)) {
-      throw new Error(
+      throw new ValidationError(
         'Password must be at least 8 characters with 1 uppercase, 1 lowercase, and 1 number',
       );
     }
     if (value.trim().length === 0) {
-      throw new Error('Password cannot be empty');
+      throw new ValidationError('Password cannot be empty');
     }
     this.value = value;
     this.hashed = hashed;
