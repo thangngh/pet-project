@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { ProductAttribute } from './product-attribute.entity';
 import { ProductMedia } from './product-media.entity';
 
@@ -30,8 +29,8 @@ export class Product {
     this.updatedAt = new Date();
   }
 
-  addAttribute(name: string, value: string): ProductAttribute {
-    const attr = new ProductAttribute(uuidv4(), name, value);
+  addAttribute(id: string, name: string, value: string): ProductAttribute {
+    const attr = new ProductAttribute(id, name, value);
     this.attributes.push(attr);
     this.updatedAt = new Date();
     return attr;
@@ -42,8 +41,8 @@ export class Product {
     this.updatedAt = new Date();
   }
 
-  addMedia(url: string, type: 'image' | 'video', isPrimary?: boolean): ProductMedia {
-    const media = new ProductMedia(uuidv4(), url, type, isPrimary ?? false);
+  addMedia(id: string, url: string, type: 'image' | 'video', isPrimary?: boolean): ProductMedia {
+    const media = new ProductMedia(id, url, type, isPrimary ?? false);
     if (isPrimary) {
       this.media.forEach(m => m.isPrimary = false);
     }
