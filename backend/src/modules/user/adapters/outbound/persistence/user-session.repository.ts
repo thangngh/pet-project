@@ -22,7 +22,6 @@ export class UserSessionRepository implements IUserSessionRepository {
   }
 
   async revokeByUserId(userId: string, exceptSessionId?: string): Promise<void> {
-    const query: any = { userId };
     if (exceptSessionId) {
       await this.repo
         .createQueryBuilder()

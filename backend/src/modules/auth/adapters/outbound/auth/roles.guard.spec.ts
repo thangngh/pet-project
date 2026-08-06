@@ -40,7 +40,9 @@ describe('RolesGuard', () => {
   it('denies when role missing', () => {
     (configService.get as jest.Mock).mockReturnValue(true);
     jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue([ROLE_ADMIN]);
-    expect(guard.canActivate(mockContext([ROLE_USER]))).toBe(false);
+    expect(() => guard.canActivate(mockContext([ROLE_USER]))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('allows when no roles required', () => {
