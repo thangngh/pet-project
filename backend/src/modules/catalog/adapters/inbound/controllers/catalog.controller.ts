@@ -7,6 +7,7 @@ import { CreateCatalogUseCase } from '../../../application/use-cases/create-cata
 import { UpdateCatalogUseCase } from '../../../application/use-cases/update-catalog.use-case';
 import { ArchiveCatalogUseCase } from '../../../application/use-cases/archive-catalog.use-case';
 import { GetCatalogTreeUseCase } from '../../../application/use-cases/get-catalog-tree.use-case';
+import { GetCatalogUseCase } from '../../../application/use-cases/get-catalog.use-case';
 import { CreateCatalogDto } from '../../../application/dto/create-catalog.dto';
 import { UpdateCatalogDto } from '../../../application/dto/update-catalog.dto';
 
@@ -18,6 +19,7 @@ export class CatalogController {
     private readonly updateCatalog: UpdateCatalogUseCase,
     private readonly archiveCatalog: ArchiveCatalogUseCase,
     private readonly getTree: GetCatalogTreeUseCase,
+    private readonly getCatalog: GetCatalogUseCase,
   ) {}
 
   @Post()
@@ -54,6 +56,6 @@ export class CatalogController {
   @Get(':id')
   @Gate('productCatalog')
   async get(@Param('id') id: string) {
-    return this.getTree.execute();
+    return this.getCatalog.execute(id);
   }
 }

@@ -7,6 +7,7 @@ import { CreateCatalogUseCase } from './application/use-cases/create-catalog.use
 import { UpdateCatalogUseCase } from './application/use-cases/update-catalog.use-case';
 import { ArchiveCatalogUseCase } from './application/use-cases/archive-catalog.use-case';
 import { GetCatalogTreeUseCase } from './application/use-cases/get-catalog-tree.use-case';
+import { GetCatalogUseCase } from './application/use-cases/get-catalog.use-case';
 import { CatalogController } from './adapters/inbound/controllers/catalog.controller';
 
 @Module({
@@ -18,6 +19,7 @@ import { CatalogController } from './adapters/inbound/controllers/catalog.contro
     UpdateCatalogUseCase,
     ArchiveCatalogUseCase,
     GetCatalogTreeUseCase,
+    GetCatalogUseCase,
   ],
 })
 export class CatalogModule {}
