@@ -1,4 +1,4 @@
-import { UserProfile } from '../entities/user-profile.entity';
+import { UserProfile } from './user-profile.entity';
 import { Phone } from '../value-objects/phone.value-object';
 
 describe('UserProfile', () => {

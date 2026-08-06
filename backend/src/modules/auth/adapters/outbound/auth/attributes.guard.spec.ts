@@ -1,4 +1,4 @@
-import { AttributesGuard, ATTRIBUTES_KEY } from './attributes.guard';
+import { AttributesGuard } from './attributes.guard';
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
