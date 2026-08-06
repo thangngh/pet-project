@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { USER_PROFILE_REPOSITORY, IUserProfileRepository } from '../../domain/ports/user-profile.repository.port';
+import { NotFoundError } from '../../../../shared/domain/errors/domain-error';
 import { ProfileDto } from '../dto/profile.dto';
 
 @Injectable()
@@ -11,7 +12,7 @@ export class GetProfileUseCase {
   async execute(userId: string): Promise<ProfileDto> {
     const profile = await this.repo.findByUserId(userId);
     if (!profile) {
-      throw new Error('Profile not found');
+      throw new NotFoundError('Profile', userId);
     }
     return new ProfileDto(
       profile.userId,

@@ -1,4 +1,5 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
+import { NotFoundError } from '../../../../shared/domain/errors/domain-error';
 import { PRODUCT_REPOSITORY, IProductRepository } from '../../domain/ports/product.repository.port';
 import { ProductDto } from '../dto/product.dto';
 
@@ -8,7 +9,7 @@ export class RemoveMediaUseCase {
 
   async execute(productId: string, mediaId: string): Promise<ProductDto> {
     const product = await this.repo.findById(productId);
-    if (!product) throw new NotFoundException('Product not found');
+    if (!product) throw new NotFoundError('Product', productId);
     product.removeMedia(mediaId);
     await this.repo.save(product);
     return new ProductDto(product.id, product.catalogId, product.name, product.status, product.createdBy, product.description, product.attributes, product.media, product.createdAt, product.updatedAt);
