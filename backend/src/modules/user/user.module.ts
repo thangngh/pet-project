@@ -12,11 +12,15 @@ import { UpdateProfileUseCase } from './application/use-cases/update-profile.use
 import { ChangePasswordUseCase } from './application/use-cases/change-password.use-case';
 import { UserController } from './adapters/inbound/controllers/user.controller';
 import { UserRegisteredHandler } from './application/handlers/user-registered.handler';
+import { AuthModule } from '../auth/auth.module';
+import { AUTH_PASSWORD_PORT } from './application/ports/auth-password.port';
+import { AuthPasswordAdapter } from './adapters/outbound/auth/auth-password.adapter';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TypeOrmUserProfile, TypeOrmUserSession]),
     CqrsModule,
+    AuthModule,
   ],
   controllers: [UserController],
   providers: [
@@ -27,6 +31,10 @@ import { UserRegisteredHandler } from './application/handlers/user-registered.ha
     {
       provide: USER_SESSION_REPOSITORY,
       useClass: UserSessionRepository,
+    },
+    {
+      provide: AUTH_PASSWORD_PORT,
+      useClass: AuthPasswordAdapter,
     },
     GetProfileUseCase,
     UpdateProfileUseCase,

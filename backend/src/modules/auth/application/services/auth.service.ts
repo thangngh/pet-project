@@ -6,6 +6,10 @@ import { User } from '../../domain/entities/user.entity';
 import { UserId } from '../../domain/value-objects/user-id.value-object';
 import { Email } from '../../domain/value-objects/email.value-object';
 import { Password } from '../../domain/value-objects/password.value-object';
+import {
+  NotFoundError,
+  UnauthorizedError,
+} from '../../../../shared/domain/errors/domain-error';
 import { EventBusService } from './event-bus.service';
 import {
   IAuthService,
@@ -87,6 +91,37 @@ export class AuthService implements IAuthService {
       isActive: user.isActive,
       createdAt: user.createdAt,
     };
+  }
+
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ): Promise<void> {
+    const id = new UserId(userId);
+    const user = await this.userRepository.findById(id);
+
+    if (!user) {
+      throw new NotFoundError('User', userId);
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedError('Account is deactivated');
+    }
+
+    const isPasswordValid = await compare(
+      oldPassword,
+      user.password.getValue(),
+    );
+    if (!isPasswordValid) {
+      throw new UnauthorizedError('Current password is incorrect');
+    }
+
+    const hashedPassword = await hash(newPassword, 10);
+    user.changePassword(new Password(hashedPassword, true));
+
+    await this.userRepository.save(user);
+    this.logger.log(`Password changed for user: ${userId}`);
   }
 
   private async generateTokens(user: User): Promise<AuthTokens> {
