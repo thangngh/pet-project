@@ -1,0 +1,85 @@
+name: CI
+
+# Every figure in every gate artifact before this workflow came from a local
+# run by whoever wrote it, which is the mechanism by which the record drifted
+# from the system (docs/audit/audit-2026-08-17.md). Evidence comes from here
+# now.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ddd_project
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ddd_project"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_DATABASE: ddd_project
+
+      # Four pools against a runner is wasteful and can exhaust PostgreSQL's
+      # default max_connections; the contexts stay separate, just smaller.
+      DB_AUTH_POOL_SIZE: 2
+      DB_USER_POOL_SIZE: 2
+      DB_CATALOG_POOL_SIZE: 2
+      DB_PRODUCT_POOL_SIZE: 2
+
+      JWT_SECRET: ci-secret-not-used-outside-ci-0123456789
+      FEATURE_USER_PROFILE: 'true'
+      FEATURE_PRODUCT_CATALOG: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm build
+
+      # Reports, never rewrites. `pnpm lint:fix` is the writing one.
+      - run: pnpm lint
+
+      - run: pnpm test
+
+      # Before the e2e suite, so an entity change with no matching migration
+      # fails the build rather than the deploy.
+      - run: pnpm migration:run
+
+      - run: pnpm test:e2e
