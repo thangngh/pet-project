@@ -301,11 +301,27 @@ by construction rather than by review, which is the point of the seam — and it
 is why D10's outbox stops being optional: after this, an outbox is the only
 correct way to make two contexts agree on anything.
 
+### 4.6 Move the session store into Auth (D15)
+
+`UserSession`, its TypeORM entity, its repository and `USER_SESSION_REPOSITORY`
+move from `modules/user/` to `modules/auth/`, and `user_sessions` becomes a
+table in the `auth` schema. The User copies are deleted; nothing has ever read
+them.
+
+**This has to happen in this slice, not in spec-002 where refresh tokens are
+built.** Under D4 the table is created by whichever context's migration names
+it. Put it in `user` now and moving it later is a data migration across two
+databases; put it in `auth` now and it costs one `git mv`.
+
+`UserModule` stops binding `USER_SESSION_REPOSITORY` — one dead binding fewer,
+and one fewer entity for the `user` connection to load.
+
 ### Verification
 
 - `docker compose up -d`, `pnpm migration:run`, `pnpm start:dev` from a clean
   clone, following only `CLAUDE.md`. Currently broken at three separate points;
   acceptance is that it works with no undocumented steps.
+- `user_sessions` exists in the `auth` schema and nowhere else.
 - Four distinct pools observable in `pg_stat_activity`, grouped by
   `application_name` — set `application_name` per data source so this is
   checkable rather than assumed.
@@ -389,6 +405,7 @@ Each task ends green — build, tests, and the checks named.
 | 2 | Formatting commit, alone | `pnpm lint` → 0 errors |
 | 3 | Compose: one `postgres`, plus the multi-db file (§4.4) | `docker compose up -d` healthy |
 | 4 | Per-context config with the fallback chain (§4.1) | Unit test: unset vars → shared database, distinct schemas |
+| 4b | Move the session store into Auth (§4.6) | `USER_SESSION_REPOSITORY` gone from `UserModule`; suite still green |
 | 5 | Four named data sources; every repository names its connection (§4.2, §4.3) | `app.bootstrap.spec.ts` resolves with four connections overridden |
 | 6 | Per-context migrations and `scripts/migrate.mjs` (§3) | `migration:run`, then `revert --context catalog` touches only catalog |
 | 7 | Identity in `JwtAuthGuard` (§1) | Guard unit test |

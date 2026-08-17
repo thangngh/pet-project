@@ -26,6 +26,9 @@ after.
 | D12 | Delete `AUTH_MIDDLEWARE_PORT`; document the real mechanism | F13, F17 | proposed | yes |
 | D13 | Add CI, and stop `pnpm lint` from rewriting files | F16, F19 | accepted | yes |
 | D14 | Correct the records rather than re-deriving them | F14, F17, F18 | accepted | yes |
+| D15 | The session store belongs to the Auth context, not User | F08, forced by D4 | proposed | yes |
+| D16 | `change-password` moves to `AuthController` | F12 follow-on | proposed | yes |
+| D17 | Reconcile roles to one spelling before RBAC is enabled | F22 | proposed | yes |
 
 ---
 
@@ -528,14 +531,91 @@ code to match a document is not worth doing while the API returns 401.
 
 ---
 
+## D15 — The session store belongs to the Auth context
+
+**Closes** part of F08. **Status** proposed — forced by D4, not chosen freely.
+
+### Context
+
+`UserSession` is complete: `refreshTokenHash`, `expiresAt`, `revokedAt`,
+`revoke()`, `rotate()`, and a repository with `findByRefreshTokenHash` and
+`revokeByUserId`. All of it works. None of it is called by anything (F08).
+
+It sits in the **User** context. Refresh tokens are issued and verified by the
+**Auth** context. Before D4 that was untidy; after D4 it is impossible —
+each context has its own pool and schema, so `AuthService` cannot write to
+`user.user_sessions` at all.
+
+### Options
+
+| | Approach | Verdict |
+|---|---|---|
+| A | Move the session store into Auth | Auth owns the credential it issues |
+| B | Auth calls a User-context port to store sessions | A synchronous cross-context call for Auth's own state, and User would own data it never reads |
+| C | Duplicate a session table in Auth, leave User's in place | Two tables, one of them dead |
+
+### Decision
+
+**A.** The entity, the TypeORM entity, the repository and the port move to
+`modules/auth/`, and the table moves to the `auth` schema. The User copies are
+deleted — they have never been read.
+
+A session is auth state, not profile state. The only reason it lived in User is
+that `UserSession` and `UserProfile` were built in the same slice.
+
+### Consequences
+
+- `UserModule` stops binding `USER_SESSION_REPOSITORY`; one dead binding fewer.
+- The table is created by Auth's first migration (spec-001 §3), so under D4
+  this move is free if it happens before those migrations are written. **After
+  them it costs a data migration** — which is why it is settled now rather than
+  discovered during spec-002.
+
+## D16 — `change-password` moves to `AuthController`
+
+**Closes** a follow-on from D11. **Status** proposed.
+
+`POST /api/v1/auth/change-password` is served by `UserController`, while every
+other `/auth/*` route is served by `AuthController`. The paths do not collide,
+so nothing breaks — it simply means two modules own one path prefix, and a
+reader looking for the auth surface finds two thirds of it.
+
+The operation is already an Auth operation: `ChangePasswordUseCase` delegates
+through `AUTH_PASSWORD_PORT` to `AuthService.changePassword`, which is where
+the work happens. Moving the route to `AuthController` lets `AUTH_PASSWORD_PORT`
+and its adapter — both added in PR #2 purely to cross the boundary — be deleted.
+
+Consequence: the path does not change, so no client is affected. One port, one
+adapter and one use case shell disappear.
+
+## D17 — Reconcile roles to one spelling before RBAC is enabled
+
+**Closes** F22. **Status** proposed.
+
+`role.constants.ts` spells roles `'ADMIN'`, `'USER'`, `'SERVICE'`. Everything
+that runs — `UserRole`, the JWT claim, eleven `@Roles('admin')` — uses
+lowercase. The constants are imported only by `roles.guard.spec.ts`, which is
+self-consistently uppercase, so both sides pass and neither sees the other.
+
+The constants become the domain's spelling, `roles.guard.spec.ts` is corrected
+to test the vocabulary production actually uses, and `@Roles(...)` call sites
+adopt the constants so there is one source. `ROLE_SERVICE` is deleted — no
+`UserRole` admits it, and no service accounts exist.
+
+This lands **before** D5 step 3. Turning RBAC on while three spellings coexist
+is how you get a guard that denies everyone with no failing test.
+
 ## Sequence
 
 | Slice | Contains | Why here |
 |-------|----------|----------|
-| **spec-001** | D1, D2, D3, D4, D13 | Makes the application run and provable. Everything else depends on it |
-| **spec-002** | D5, D6, D7, D8 | Auth and authorization hardening. F20 before F05, always |
+| **spec-001** | D1, D2, D3, D4, D13, **D15** | Makes the application run and provable. D15 joins it because the session table must land in the right schema the first time |
+| **spec-002** | D17, D5, D6, D7, D8, D16 | Auth and authorization hardening, in that order: vocabulary, then the escalation path, then the flag |
 | **spec-003** | D9, D10 | Durability and the cascade. Needs a database to be worth testing |
-| **spec-004** | D11, D12, D14 | Surface and records. D11 waits on your answer |
+| **spec-004** | D12, D14 | Records. D11 is already done |
+
+Done ahead of their slice: **D11** (prefix) and **D5 step 1** (the `role`
+field), both because they were cheap now and getting more expensive.
 
 Only spec-001 is written now, and it builds D4 as ruled: one database, four
 pools, four schemas, four migration histories. D11 has already been implemented
