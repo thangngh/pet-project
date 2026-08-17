@@ -48,6 +48,12 @@ const contextDataSource = (context: DbContext) =>
 
         autoLoadEntities: true,
 
+        // gen_random_uuid() instead of uuid_generate_v4(): built into
+        // PostgreSQL 13+, so no extension to install. Set here as well as in
+        // the CLI data source, or a generated migration would disagree with a
+        // hand-written one.
+        uuidExtension: 'pgcrypto' as const,
+
         // Schemas come from migrations, never from the application. Running
         // migrations is an explicit step, never a side effect of boot.
         synchronize: false,

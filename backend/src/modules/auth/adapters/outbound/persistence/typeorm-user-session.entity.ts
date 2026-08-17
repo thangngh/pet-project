@@ -1,13 +1,15 @@
-import { Entity, Column, PrimaryGeneratedColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, Index } from 'typeorm';
 
 @Entity('user_sessions')
 export class TypeOrmUserSession {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index('IDX_user_sessions_userId')
   @Column()
   userId: string;
 
+  @Index('IDX_user_sessions_refreshTokenHash')
   @Column()
   refreshTokenHash: string;
 
