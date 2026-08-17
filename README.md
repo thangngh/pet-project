@@ -37,6 +37,11 @@ pnpm start:dev            # :3001
 source, so skipping it gives a process that starts and then fails every
 request with `relation does not exist`.
 
+pnpm prints `Ignored build scripts: @nestjs/core, bcrypt`. That is fine where
+`bcrypt` ships a prebuilt binary for your platform, which is how the sequence
+above was verified. If `pnpm seed:admin` fails to load `bcrypt_lib.node`, run
+`pnpm approve-builds` and reinstall.
+
 Check it came up:
 
 ```bash
