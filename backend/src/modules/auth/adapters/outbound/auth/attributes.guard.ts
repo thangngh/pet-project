@@ -18,7 +18,10 @@ export class AttributesGuard implements CanActivate {
     }
 
     const required =
-      this.reflector.get<Record<string, any>>(ATTRIBUTES_KEY, context.getHandler()) || {};
+      this.reflector.get<Record<string, any>>(
+        ATTRIBUTES_KEY,
+        context.getHandler(),
+      ) || {};
 
     if (Object.keys(required).length === 0) return true;
 

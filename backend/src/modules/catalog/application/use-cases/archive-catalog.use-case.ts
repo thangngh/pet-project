@@ -1,7 +1,10 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { NotFoundError } from '../../../../shared/domain/errors/domain-error';
 import { EventBusService } from '../../../../shared/adapters/event-bus/event-bus.service';
-import { CATALOG_REPOSITORY, ICatalogRepository } from '../../domain/ports/catalog.repository.port';
+import {
+  CATALOG_REPOSITORY,
+  ICatalogRepository,
+} from '../../domain/ports/catalog.repository.port';
 
 @Injectable()
 export class ArchiveCatalogUseCase {

@@ -36,7 +36,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const exResponse = exception.getResponse();
-      message = typeof exResponse === 'string' ? exResponse : (exResponse as Record<string, unknown>).message as string;
+      message =
+        typeof exResponse === 'string'
+          ? exResponse
+          : ((exResponse as Record<string, unknown>).message as string);
       if (Array.isArray(message)) message = message.join(', ');
       stack = exception.stack;
     } else if (exception instanceof Error) {
@@ -48,7 +51,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = 'Internal server error';
     }
 
-    this.logger.error(`${request.method} ${request.url} -> ${status}: ${message}`, stack);
+    this.logger.error(
+      `${request.method} ${request.url} -> ${status}: ${message}`,
+      stack,
+    );
 
     response.status(status).json({
       statusCode: status,

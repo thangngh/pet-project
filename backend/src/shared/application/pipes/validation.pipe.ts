@@ -9,7 +9,10 @@ import { validate } from 'class-validator';
 
 @Injectable()
 export class ValidationPipe implements PipeTransform<unknown> {
-  async transform(value: unknown, { metatype }: ArgumentMetadata): Promise<unknown> {
+  async transform(
+    value: unknown,
+    { metatype }: ArgumentMetadata,
+  ): Promise<unknown> {
     if (!metatype || !this.isDto(metatype)) return value;
 
     const object = plainToInstance(metatype, value);

@@ -8,7 +8,8 @@ import { IUserSessionRepository } from '../../../domain/ports/user-session.repos
 @Injectable()
 export class UserSessionRepository implements IUserSessionRepository {
   constructor(
-    @InjectRepository(TypeOrmUserSession) private readonly repo: Repository<TypeOrmUserSession>,
+    @InjectRepository(TypeOrmUserSession)
+    private readonly repo: Repository<TypeOrmUserSession>,
   ) {}
 
   async save(session: UserSession): Promise<void> {
@@ -17,17 +18,25 @@ export class UserSessionRepository implements IUserSessionRepository {
   }
 
   async findByRefreshTokenHash(hash: string): Promise<UserSession | null> {
-    const entity = await this.repo.findOne({ where: { refreshTokenHash: hash } });
+    const entity = await this.repo.findOne({
+      where: { refreshTokenHash: hash },
+    });
     return entity ? this.toDomain(entity) : null;
   }
 
-  async revokeByUserId(userId: string, exceptSessionId?: string): Promise<void> {
+  async revokeByUserId(
+    userId: string,
+    exceptSessionId?: string,
+  ): Promise<void> {
     if (exceptSessionId) {
       await this.repo
         .createQueryBuilder()
         .update(TypeOrmUserSession)
         .set({ revokedAt: new Date() })
-        .where('userId = :userId AND id != :exceptSessionId', { userId, exceptSessionId })
+        .where('userId = :userId AND id != :exceptSessionId', {
+          userId,
+          exceptSessionId,
+        })
         .execute();
     } else {
       await this.repo.update({ userId }, { revokedAt: new Date() });

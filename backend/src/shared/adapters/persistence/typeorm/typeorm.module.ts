@@ -12,9 +12,15 @@ import { ConfigService } from '@nestjs/config';
         username: configService.get<string>('app.database.username'),
         password: configService.get<string>('app.database.password'),
         database: configService.get<string>('app.database.database'),
-        entities: [__dirname + '/../../../../modules/**/*.entity.ts', __dirname + '/../../../../**/*.entity.ts'],
+        entities: [
+          __dirname + '/../../../../modules/**/*.entity.ts',
+          __dirname + '/../../../../**/*.entity.ts',
+        ],
         autoLoadEntities: true,
-        synchronize: configService.get<boolean>('app.database.synchronize', false),
+        synchronize: configService.get<boolean>(
+          'app.database.synchronize',
+          false,
+        ),
         logging: configService.get<boolean>('app.database.logging', false),
       }),
       inject: [ConfigService],

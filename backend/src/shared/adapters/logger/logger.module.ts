@@ -13,12 +13,16 @@ import { ConfigService } from '@nestjs/config';
             format: winston.format.combine(
               winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
               winston.format.errors({ stack: true }),
-              winston.format.printf(({ timestamp, level, message, context, trace, ...meta }) => {
-                const ctx = context ? `[${context}]` : '';
-                const traceStr = trace ? `\n${trace}` : '';
-                const metaStr = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : '';
-                return `${timestamp} ${level.toUpperCase()} ${ctx} ${message}${metaStr}${traceStr}`;
-              }),
+              winston.format.printf(
+                ({ timestamp, level, message, context, trace, ...meta }) => {
+                  const ctx = context ? `[${context}]` : '';
+                  const traceStr = trace ? `\n${trace}` : '';
+                  const metaStr = Object.keys(meta).length
+                    ? ` ${JSON.stringify(meta)}`
+                    : '';
+                  return `${timestamp} ${level.toUpperCase()} ${ctx} ${message}${metaStr}${traceStr}`;
+                },
+              ),
             ),
           }),
         ],

@@ -2,7 +2,10 @@ import { RolesGuard } from './roles.guard';
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { ROLE_ADMIN, ROLE_USER } from '../../../application/constants/role.constants';
+import {
+  ROLE_ADMIN,
+  ROLE_USER,
+} from '../../../application/constants/role.constants';
 
 describe('RolesGuard', () => {
   let guard: RolesGuard;

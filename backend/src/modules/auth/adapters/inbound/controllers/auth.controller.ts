@@ -9,7 +9,10 @@ import {
   HttpStatus,
   Inject,
 } from '@nestjs/common';
-import { AUTH_SERVICE, IAuthService } from '../../../application/ports/auth-service.port';
+import {
+  AUTH_SERVICE,
+  IAuthService,
+} from '../../../application/ports/auth-service.port';
 import { RegisterDto } from '../../../application/dto/register.dto';
 import { LoginDto } from '../../../application/dto/login.dto';
 import { AuthResponseDto } from '../../../application/dto/auth-response.dto';

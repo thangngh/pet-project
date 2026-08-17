@@ -12,7 +12,12 @@ describe('AttributesGuard', () => {
     ({
       switchToHttp: () => ({
         getRequest: () => ({
-          identity: { userId: 'u1', roles: [], authMethod: 'jwt', attributes: attrs },
+          identity: {
+            userId: 'u1',
+            roles: [],
+            authMethod: 'jwt',
+            attributes: attrs,
+          },
         }),
       }),
       getHandler: () => jest.fn(),

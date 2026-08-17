@@ -1,7 +1,15 @@
-import { Injectable, Inject, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
-import { IUserRepository, USER_REPOSITORY } from '../../domain/ports/user-repository.port';
+import {
+  IUserRepository,
+  USER_REPOSITORY,
+} from '../../domain/ports/user-repository.port';
 import { User } from '../../domain/entities/user.entity';
 import { UserId } from '../../domain/value-objects/user-id.value-object';
 import { Email } from '../../domain/value-objects/email.value-object';
@@ -64,7 +72,10 @@ export class AuthService implements IAuthService {
       throw new UnauthorizedException('Account is deactivated');
     }
 
-    const isPasswordValid = await compare(input.password, user.password.getValue());
+    const isPasswordValid = await compare(
+      input.password,
+      user.password.getValue(),
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }

@@ -8,7 +8,8 @@ import { ICatalogRepository } from '../../../domain/ports/catalog.repository.por
 @Injectable()
 export class CatalogRepository implements ICatalogRepository {
   constructor(
-    @InjectRepository(TypeOrmCatalog) private readonly repo: Repository<TypeOrmCatalog>,
+    @InjectRepository(TypeOrmCatalog)
+    private readonly repo: Repository<TypeOrmCatalog>,
   ) {}
 
   async save(catalog: Catalog): Promise<void> {
@@ -22,12 +23,12 @@ export class CatalogRepository implements ICatalogRepository {
 
   async findAll(): Promise<Catalog[]> {
     const entities = await this.repo.find();
-    return entities.map(e => this.toDomain(e));
+    return entities.map((e) => this.toDomain(e));
   }
 
   async findChildren(parentId: string): Promise<Catalog[]> {
     const entities = await this.repo.find({ where: { parentId } });
-    return entities.map(e => this.toDomain(e));
+    return entities.map((e) => this.toDomain(e));
   }
 
   private toTypeOrm(domain: Catalog): TypeOrmCatalog {
@@ -44,8 +45,13 @@ export class CatalogRepository implements ICatalogRepository {
 
   private toDomain(entity: TypeOrmCatalog): Catalog {
     return new Catalog(
-      entity.id, entity.name, entity.parentId,
-      entity.status as any, entity.createdAt, entity.updatedAt, entity.version,
+      entity.id,
+      entity.name,
+      entity.parentId,
+      entity.status as any,
+      entity.createdAt,
+      entity.updatedAt,
+      entity.version,
     );
   }
 }

@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, UnauthorizedException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../../../auth/adapters/outbound/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../../auth/adapters/outbound/auth/roles.guard';
 import { Roles } from '../../../../auth/adapters/outbound/auth/roles.decorator';
@@ -37,30 +48,39 @@ export class ProductController {
 
   @Post()
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async create(@Body() dto: CreateProductDto) {
     const userId = this.requestCtx.getIdentity()?.userId;
     if (!userId) throw new UnauthorizedException();
-    return this.createProduct.execute(dto.catalogId, dto.name, userId, dto.description);
+    return this.createProduct.execute(
+      dto.catalogId,
+      dto.name,
+      userId,
+      dto.description,
+    );
   }
 
   @Patch(':id')
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.updateProduct.execute(id, dto.name, dto.description);
   }
 
   @Post(':id/publish')
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async publish(@Param('id') id: string) {
     return this.publishProduct.execute(id);
   }
 
   @Post(':id/archive')
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async archive(@Param('id') id: string) {
     await this.archiveProduct.execute(id);
     return { message: 'Product archived' };
@@ -80,28 +100,41 @@ export class ProductController {
 
   @Post(':id/attributes')
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
-  async addAttr(@Param('id') id: string, @Body('name') name: string, @Body('value') value: string) {
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async addAttr(
+    @Param('id') id: string,
+    @Body('name') name: string,
+    @Body('value') value: string,
+  ) {
     return this.addAttribute.execute(id, name, value);
   }
 
   @Delete(':id/attributes/:attrId')
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async removeAttr(@Param('id') id: string, @Param('attrId') attrId: string) {
     return this.removeAttribute.execute(id, attrId);
   }
 
   @Post(':id/media')
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
-  async addMed(@Param('id') id: string, @Body('url') url: string, @Body('type') type: 'image' | 'video', @Body('isPrimary') isPrimary?: boolean) {
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async addMed(
+    @Param('id') id: string,
+    @Body('url') url: string,
+    @Body('type') type: 'image' | 'video',
+    @Body('isPrimary') isPrimary?: boolean,
+  ) {
     return this.addMedia.execute(id, url, type, isPrimary);
   }
 
   @Delete(':id/media/:mediaId')
   @Gate('productCatalog')
-  @UseGuards(RolesGuard) @Roles('admin')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
   async removeMed(@Param('id') id: string, @Param('mediaId') mediaId: string) {
     return this.removeMedia.execute(id, mediaId);
   }

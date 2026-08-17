@@ -34,30 +34,64 @@ export class User {
     this._updatedAt = updatedAt || new Date();
   }
 
-  static create(email: Email, password: Password, role: UserRole = 'user'): User {
+  static create(
+    email: Email,
+    password: Password,
+    role: UserRole = 'user',
+  ): User {
     const id = new UserId(crypto.randomUUID());
     const user = new User(id, email, password, role);
     user.addEvent(new UserCreatedEvent(id.toString(), email.toString()));
     return user;
   }
 
-  get id(): UserId { return this._id; }
-  get email(): Email { return this._email; }
-  get password(): Password { return this._password; }
-  get role(): UserRole { return this._role; }
-  get isActive(): boolean { return this._isActive; }
-  get createdAt(): Date { return this._createdAt; }
-  get updatedAt(): Date { return this._updatedAt; }
-  get events(): DomainEvent[] { return [...this._events]; }
+  get id(): UserId {
+    return this._id;
+  }
+  get email(): Email {
+    return this._email;
+  }
+  get password(): Password {
+    return this._password;
+  }
+  get role(): UserRole {
+    return this._role;
+  }
+  get isActive(): boolean {
+    return this._isActive;
+  }
+  get createdAt(): Date {
+    return this._createdAt;
+  }
+  get updatedAt(): Date {
+    return this._updatedAt;
+  }
+  get events(): DomainEvent[] {
+    return [...this._events];
+  }
 
-  clearEvents(): void { this._events = []; }
+  clearEvents(): void {
+    this._events = [];
+  }
 
   private addEvent(event: DomainEvent): void {
     this._events.push(event);
   }
 
-  deactivate(): void { this._isActive = false; this._updatedAt = new Date(); }
-  activate(): void { this._isActive = true; this._updatedAt = new Date(); }
-  changePassword(newPassword: Password): void { this._password = newPassword; this._updatedAt = new Date(); }
-  changeEmail(newEmail: Email): void { this._email = newEmail; this._updatedAt = new Date(); }
+  deactivate(): void {
+    this._isActive = false;
+    this._updatedAt = new Date();
+  }
+  activate(): void {
+    this._isActive = true;
+    this._updatedAt = new Date();
+  }
+  changePassword(newPassword: Password): void {
+    this._password = newPassword;
+    this._updatedAt = new Date();
+  }
+  changeEmail(newEmail: Email): void {
+    this._email = newEmail;
+    this._updatedAt = new Date();
+  }
 }

@@ -21,7 +21,9 @@ export class UserRepository implements IUserRepository {
   }
 
   async findByEmail(email: Email): Promise<User | null> {
-    const entity = await this.repo.findOne({ where: { email: email.toString() } });
+    const entity = await this.repo.findOne({
+      where: { email: email.toString() },
+    });
     return entity ? this.toDomain(entity) : null;
   }
 

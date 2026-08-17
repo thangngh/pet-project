@@ -9,7 +9,9 @@ import appConfig from './app.config';
       isGlobal: true,
       load: [appConfig],
       validationSchema: Joi.object({
-        NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+        NODE_ENV: Joi.string()
+          .valid('development', 'production', 'test')
+          .default('development'),
         PORT: Joi.number().default(3001),
         JWT_SECRET: Joi.string().min(16).optional(),
         JWT_EXPIRES_IN: Joi.string().default('15m'),
@@ -20,7 +22,9 @@ import appConfig from './app.config';
         DB_DATABASE: Joi.string().default('ddd_project'),
         THROTTLE_TTL: Joi.number().default(60),
         THROTTLE_LIMIT: Joi.number().default(100),
-        LOG_LEVEL: Joi.string().valid('error', 'warn', 'info', 'debug').default('info'),
+        LOG_LEVEL: Joi.string()
+          .valid('error', 'warn', 'info', 'debug')
+          .default('info'),
       }),
       validationOptions: {
         abortEarly: true,

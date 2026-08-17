@@ -1,7 +1,10 @@
 import { EventsHandler, IEventHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
 import { CatalogDeletedEvent } from '../../../../shared/adapters/event-bus/integration-events/catalog-deleted.event';
-import { PRODUCT_REPOSITORY, IProductRepository } from '../../domain/ports/product.repository.port';
+import {
+  PRODUCT_REPOSITORY,
+  IProductRepository,
+} from '../../domain/ports/product.repository.port';
 
 @EventsHandler(CatalogDeletedEvent)
 export class CatalogDeletedHandler implements IEventHandler<CatalogDeletedEvent> {
