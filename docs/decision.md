@@ -22,7 +22,7 @@ after.
 | D8 | Refresh tokens: persist and rotate, using the `UserSession` that already exists | F08 | proposed | yes |
 | D9 | Archive cascades to the catalog subtree, one event per catalog | F09 | proposed | yes |
 | D10 | Adopt a transactional outbox — but not yet | F11 | proposed | costly |
-| D11 | Single global prefix `api/v1`; strip it from controllers | F12 | **needs your call** | breaking |
+| D11 | Single global prefix `api/v1`; strip it from controllers | F12 | **accepted, done** | breaking |
 | D12 | Delete `AUTH_MIDDLEWARE_PORT`; document the real mechanism | F13, F17 | proposed | yes |
 | D13 | Add CI, and stop `pnpm lint` from rewriting files | F16, F19 | accepted | yes |
 | D14 | Correct the records rather than re-deriving them | F14, F17, F18 | accepted | yes |
@@ -401,9 +401,10 @@ be created. That is how the current gate history came to overstate the system.
 
 ---
 
-## D11 — Single global prefix `api/v1` — **needs your call**
+## D11 — Single global prefix `api/v1`
 
-**Closes** F12. **Status** needs your decision.
+**Closes** F12. **Status** accepted and implemented, 2026-08-17 — you confirmed
+no client calls the API yet.
 
 Routes are double-prefixed today: `/api/api/v1/products` for three controllers,
 `/api/auth/...` for the fourth. No client can be written against the documented
@@ -417,17 +418,34 @@ API.
 | B | Drop the global prefix, keep controller prefixes | Auth still differs; versioning stays per-controller |
 | C | Nest's `enableVersioning` | Larger change; earns its keep only with two live versions |
 
-### Recommendation
+### Decision
 
 **A.** One place decides the prefix, everything is versioned consistently, and
 `/api/v1` is what the interface documentation describes.
 
-### Why this needs you
+`setGlobalPrefix('api/v1', { exclude: ['health'] })` — health stays at `/health`
+so liveness probes do not move with an API version. That is the one deviation
+from a plain option A, and it is the conventional one.
 
-Every path changes. If anything already calls this API — a frontend branch, a
-Postman collection, a deployed environment — those calls break at once. Cheap
-to do, not cheap to undo once clients exist. Tell me whether anything is
-calling it today.
+### Consequences
+
+Every path changed at once. That was safe only because nothing calls the API
+yet; it would not have been later, which is why it went in now rather than
+waiting behind the rest of spec-004.
+
+Two things surfaced while doing it, neither fixed here:
+
+- `POST /api/v1/auth/change-password` is served by `UserController` while the
+  rest of `/auth/*` is served by `AuthController`. The paths do not collide,
+  but the ownership reads oddly. spec-002 touches auth anyway and is the place
+  to settle it.
+- `test/app.e2e-spec.ts` asserted `GET /` returning `Hello World!` — a route
+  that has not existed since the scaffold. It now checks `/health`, though it
+  still cannot run until a database exists (spec-001 §3, §4).
+
+A route-map test now asserts every path sits under exactly one `api/v1` prefix.
+The original defect never failed anything; the paths were simply wrong, which
+is precisely the kind of fault that needs a test rather than a review.
 
 ---
 
@@ -513,16 +531,18 @@ code to match a document is not worth doing while the API returns 401.
 | **spec-003** | D9, D10 | Durability and the cascade. Needs a database to be worth testing |
 | **spec-004** | D11, D12, D14 | Surface and records. D11 waits on your answer |
 
-Only spec-001 is written now, and it now builds D4 as ruled: one database, four
-pools, four schemas, four migration histories. spec-004 waits on D11 outright,
-because there is no version of it that does not change every path.
+Only spec-001 is written now, and it builds D4 as ruled: one database, four
+pools, four schemas, four migration histories. D11 has already been implemented
+ahead of spec-004 — it was safe to take early precisely because no client
+exists, and it would only have grown more expensive.
 
 ## Open questions for you
 
-1. **D11** — is anything calling this API today? If yes, the prefix fix needs a
-   deprecation window rather than a rename.
-2. **D5** — does anything you use register an admin through the public endpoint?
+1. **D5** — does anything you use register an admin through the public endpoint?
    If so, the seed lands before the field is removed.
 
-Answered: **D4** — one database, one pool per context, multi-database as the
-target (2026-08-17).
+Answered:
+
+- **D4** — one database, one pool per context, multi-database as the target
+  (2026-08-17).
+- **D11** — no client calls the API yet; prefix changed (2026-08-17).

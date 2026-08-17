@@ -8,7 +8,7 @@ import { ChangePasswordUseCase } from '../../../application/use-cases/change-pas
 import { UpdateProfileDto } from '../../../application/dto/update-profile.dto';
 import { ChangePasswordDto } from '../../../application/dto/change-password.dto';
 
-@Controller('api/v1')
+@Controller()
 @UseGuards(JwtAuthGuard)
 export class UserController {
   constructor(

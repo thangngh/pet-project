@@ -11,7 +11,7 @@ import { GetCatalogUseCase } from '../../../application/use-cases/get-catalog.us
 import { CreateCatalogDto } from '../../../application/dto/create-catalog.dto';
 import { UpdateCatalogDto } from '../../../application/dto/update-catalog.dto';
 
-@Controller('api/v1/catalogs')
+@Controller('catalogs')
 @UseGuards(JwtAuthGuard)
 export class CatalogController {
   constructor(

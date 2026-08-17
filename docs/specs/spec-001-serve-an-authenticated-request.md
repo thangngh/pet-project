@@ -10,7 +10,7 @@ Make one real request work end to end, on a real database, proved by a test
 that runs in CI:
 
 ```
-POST /auth/register  →  POST /auth/login  →  GET …/me  →  200 with the profile
+POST /api/v1/auth/register → POST /api/v1/auth/login → GET /api/v1/me → 200 with the profile
 ```
 
 Today every step of that fails for a different reason. That single chain
@@ -27,9 +27,9 @@ than a list of fixes.
       variables only
 - [ ] The chain above returns 200 with the profile created by the
       `UserCreated` handler
-- [ ] `GET …/products` with no query string returns page 1 with 20 items, not
-      a `NaN` failure
-- [ ] `POST /auth/register` with `{"password": "a"}` returns 400, not 201
+- [ ] `GET /api/v1/products/search` with no query string returns page 1 with 20
+      items, not a `NaN` failure
+- [ ] `POST /api/v1/auth/register` with `{"password": "a"}` returns 400, not 201
 - [ ] CI runs build, lint, unit tests, migrations and e2e on every pull request
 - [ ] `pnpm lint` no longer rewrites files
 
@@ -40,9 +40,10 @@ migrations, database alignment, CI, formatting baseline, lockfile.
 
 **Out, deliberately:** RBAC and the role field (spec-002 — F05 must not be
 touched before F20), refresh tokens (spec-002), the gate 503 (spec-002),
-outbox and subtree cascade (spec-003), route prefixes and documentation
-(spec-004). The endpoint paths in this spec keep their current double prefix;
-fixing that is D11 and needs your answer first.
+outbox and subtree cascade (spec-003), documentation (spec-004).
+
+**Already done, ahead of this spec:** D11's route prefix. Paths below are the
+real ones — `/api/v1/...`, with `/health` excluded.
 
 ## Persistence shape (D4, ruled 2026-08-17)
 
@@ -128,10 +129,10 @@ endpoint starts validating at once:
 
 | Endpoint | New behaviour |
 |---|---|
-| `POST /auth/register` | Weak password or bad email → 400 |
-| `POST /auth/login` | Missing field → 400 |
-| `PATCH …/me/profile` | Unknown field → 400 (`forbidNonWhitelisted`) |
-| `GET …/products` | `page`/`limit` default and coerce → F10 fixed |
+| `POST /api/v1/auth/register` | Weak password or bad email → 400 |
+| `POST /api/v1/auth/login` | Missing field → 400 |
+| `PATCH /api/v1/me/profile` | Unknown field → 400 (`forbidNonWhitelisted`) |
+| `GET /api/v1/products/search` | `page`/`limit` default and coerce → F10 fixed |
 | all writes | Unknown properties stripped |
 
 `RegisterDto.role` survives this step — `whitelist` keeps declared fields.
@@ -354,25 +355,27 @@ The audit is worth little if the next claim is again unverifiable.
 `backend/test/auth-profile.e2e-spec.ts`, against the CI PostgreSQL service:
 
 ```
-1. POST /api/auth/register  { email, password: "Str0ngPass" }   → 201, tokens
-2. the UserCreated handler has created a profile                 → assert row exists
-3. POST /api/auth/login                                          → 200, tokens
-4. GET  /api/api/v1/me   with the access token                   → 200, profile
-5. GET  /api/api/v1/me   with no token                           → 401
-6. POST /api/auth/register { password: "a" }                     → 400
-7. GET  /api/api/v1/products                                     → 200, page 1, limit 20
+1. POST /api/v1/auth/register  { email, password: "Str0ngPass" }  → 201, tokens
+2. the UserCreated handler has created a profile                   → assert row exists
+3. POST /api/v1/auth/login                                         → 200, tokens
+4. GET  /api/v1/me            with the access token                → 200, profile
+5. GET  /api/v1/me            with no token                        → 401
+6. POST /api/v1/auth/register { password: "a" }                    → 400
+7. GET  /api/v1/products/search                                    → 200, page 1, limit 20
+8. GET  /health                                                    → 200, unprefixed
 ```
-
-The paths in steps 4 and 7 carry the double prefix from F12 on purpose: this
-spec proves the system as it is. D11 changes them, and this file changes with
-it.
 
 Step 2 is the first end-to-end proof of the `UserCreated` flow. PR #3 proved
 delivery through the bus with a stubbed repository; this proves it against a
-database.
+database — and step 2 crosses a context boundary, so under D4 it is also the
+first proof that two pools see a consistent picture.
 
-Also update `backend/test/app.e2e-spec.ts`, currently the Nest scaffold's
-`GET /` check against a route that the global prefix has since moved.
+Step 4 is the acceptance for §1: it cannot return 200 unless identity reaches
+`RequestContext`.
+
+`backend/test/app.e2e-spec.ts` has already been corrected — it asserted
+`GET /` returning `Hello World!`, a route that has not existed since the
+scaffold. It still cannot run until §3 and §4 land.
 
 ---
 

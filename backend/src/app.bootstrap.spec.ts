@@ -23,7 +23,7 @@ describe('AppModule wiring', () => {
     TypeOrmProduct,
   ];
 
-  it('resolves the whole provider graph', async () => {
+  const build = () => {
     const builder = Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(getDataSourceToken())
       .useValue({
@@ -35,8 +35,41 @@ describe('AppModule wiring', () => {
       builder.overrideProvider(getRepositoryToken(entity)).useValue({});
     }
 
-    const moduleRef = await builder.compile();
+    return builder.compile();
+  };
+
+  it('resolves the whole provider graph', async () => {
+    const moduleRef = await build();
     expect(moduleRef).toBeDefined();
     await moduleRef.close();
+  });
+
+  // Routes used to come out as /api/api/v1/... because three controllers
+  // repeated the global prefix. Nothing failed — the paths were simply wrong.
+  it('mounts every route under a single api/v1 prefix', async () => {
+    const moduleRef = await build();
+    const app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api/v1', { exclude: ['health'] });
+    await app.init();
+
+    const server = app.getHttpAdapter().getInstance();
+    const paths: string[] = (server._router?.stack ?? [])
+      .filter((layer: any) => layer.route)
+      .map((layer: any) => layer.route.path);
+
+    expect(paths).toContain('/health');
+    expect(paths).toContain('/api/v1/auth/login');
+    expect(paths).toContain('/api/v1/me');
+    expect(paths).toContain('/api/v1/catalogs/tree');
+    expect(paths).toContain('/api/v1/products');
+
+    const versioned = paths.filter((p) => p !== '/health');
+    expect(versioned.length).toBeGreaterThan(0);
+    for (const path of versioned) {
+      expect(path.startsWith('/api/v1/')).toBe(true);
+      expect(path).not.toContain('/api/api');
+    }
+
+    await app.close();
   });
 });

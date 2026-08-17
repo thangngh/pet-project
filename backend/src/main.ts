@@ -9,7 +9,7 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   const port = configService.get<number>('app.port', 3001);
-  const apiPrefix = configService.get<string>('app.apiPrefix', 'api');
+  const apiPrefix = configService.get<string>('app.apiPrefix', 'api/v1');
   const corsOrigins = configService.get<string[]>('app.corsOrigins', ['*']);
 
   // Security headers
@@ -21,8 +21,8 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Global prefix
-  app.setGlobalPrefix(apiPrefix);
+  // Global prefix. Health stays unprefixed so probes survive a version bump.
+  app.setGlobalPrefix(apiPrefix, { exclude: ['health'] });
 
   await app.listen(port);
   console.log(`Application running on http://localhost:${port}/${apiPrefix}`);

@@ -18,7 +18,7 @@ import { CreateProductDto } from '../../../application/dto/create-product.dto';
 import { UpdateProductDto } from '../../../application/dto/update-product.dto';
 import { SearchProductDto } from '../../../application/dto/search-product.dto';
 
-@Controller('api/v1/products')
+@Controller('products')
 @UseGuards(JwtAuthGuard)
 export class ProductController {
   constructor(
