@@ -52,4 +52,14 @@ export interface IAuthService {
    * nothing else can create the first admin, because promoting requires one.
    */
   ensureAdmin(email: string, password: string): Promise<'created' | 'exists'>;
+
+  /**
+   * Exchanges a refresh token for a new pair and rotates the session. The
+   * presented token is unusable afterwards; presenting it again is treated as
+   * a compromise and ends every session for that user.
+   */
+  refresh(refreshToken: string): Promise<AuthTokens>;
+
+  /** Revokes the session behind this refresh token. Silent if unknown. */
+  logout(refreshToken: string): Promise<void>;
 }

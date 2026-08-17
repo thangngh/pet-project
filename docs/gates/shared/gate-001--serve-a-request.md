@@ -24,16 +24,26 @@
 - [x] `pnpm lint` reports without rewriting
 - [x] One lockfile
 - [x] CI workflow runs build, lint, unit tests, migrations and e2e
-- [ ] CI has actually run on a pull request
+- [x] CI has actually run on a pull request
 - [ ] `docker compose up -d` verified
 
 ## Decision
 
-**PASS, with two criteria unverified and named below.**
+**PASS, with one criterion unverified and named below.**
 
 **Reason:** every behavioural criterion was exercised against a running
-PostgreSQL 16 instance rather than asserted. The two unmet items are
-environmental, not defects, and both are stated rather than omitted.
+PostgreSQL 16 instance rather than asserted. The one remaining unmet item is
+environmental, not a defect, and is stated rather than omitted.
+
+**Updated 2026-08-17, after the gate was first written:** CI has since run on
+this pull request and passed — build, lint, 113 unit tests, migrations and 46
+e2e tests against a postgres:16 service.
+
+  https://github.com/thangngh/pet-project/actions/runs/32009239875
+
+That closes the second of the two criteria this gate recorded as unmet. The
+figures above were local when written; they are now reproduced by CI, which
+was the entire point of §5.
 
 ---
 
@@ -42,7 +52,7 @@ environmental, not defects, and both are stated rather than omitted.
 ### Outcome
 
 **Gate decision:** PASS
-**Action:** proceed to spec-002, once CI has run green on the pull request
+**Action:** proceed to spec-002 — CI is green
 
 ### Evidence
 
@@ -133,14 +143,16 @@ behaviour.
   against the same `ddd_project` database the compose file serves, so the
   application path is identical, but the compose file itself is unexercised.
   First person with Docker should run it and record the result here.
-- **The CI workflow has never run.** The full sequence — build, lint, test,
-  `migration:run`, `test:e2e` — was run locally in the workflow's order
-  against a clean database and passed. That is not the same as GitHub Actions
-  having run it, and this gate does not claim it has.
+- ~~**The CI workflow has never run.**~~ Closed: run 32009239875 passed on
+  commit ad5277d. Left visible rather than deleted, because the gap between
+  "verified locally" and "verified by CI" is the one this audit exists to
+  close, and a record that quietly edits away its own unmet criteria is the
+  failure mode all over again.
 
 ### Next Step
 
-CI runs on the pull request. When it is green, its run URL replaces the local
-figures above and the two unchecked criteria close. Then spec-002 — whose
-first task, the role vocabulary, must land before `FEATURE_RBAC=true`, or
-`@Roles` denies everyone.
+Done: CI is green (above). spec-002 followed, and its gate is at
+`docs/gates/auth/gate-001--enforce.md`.
+
+`docker compose up -d` remains unverified and stays an open item on this gate
+until someone with a Docker daemon runs it.

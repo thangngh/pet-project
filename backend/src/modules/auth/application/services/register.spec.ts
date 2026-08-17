@@ -7,6 +7,11 @@ const deps = () => ({
     findById: jest.fn(),
     save: jest.fn(),
   },
+  sessionRepository: {
+    save: jest.fn(),
+    findByRefreshTokenHash: jest.fn().mockResolvedValue(null),
+    revokeByUserId: jest.fn(),
+  },
   jwtService: { sign: jest.fn().mockReturnValue('token') },
   eventBus: { publish: jest.fn(), publishEvents: jest.fn() },
 });
@@ -14,6 +19,7 @@ const deps = () => ({
 const build = (d: ReturnType<typeof deps>) =>
   new AuthService(
     d.userRepository as any,
+    d.sessionRepository as any,
     d.jwtService as any,
     d.eventBus as any,
   );

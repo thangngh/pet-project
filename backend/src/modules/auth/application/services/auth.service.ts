@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { compare, hash } from 'bcrypt';
+import { createHash, randomUUID } from 'crypto';
 import {
   IUserRepository,
   USER_REPOSITORY,
@@ -20,6 +21,11 @@ import {
   UnauthorizedError,
 } from '../../../../shared/domain/errors/domain-error';
 import { EventBusService } from '../../../../shared/adapters/event-bus/event-bus.service';
+import { UserSession } from '../../domain/entities/user-session.entity';
+import {
+  USER_SESSION_REPOSITORY,
+  IUserSessionRepository,
+} from '../../domain/ports/user-session.repository.port';
 import {
   IAuthService,
   AuthTokens,
@@ -35,6 +41,8 @@ export class AuthService implements IAuthService {
   constructor(
     @Inject(USER_REPOSITORY)
     private readonly userRepository: IUserRepository,
+    @Inject(USER_SESSION_REPOSITORY)
+    private readonly sessionRepository: IUserSessionRepository,
     private readonly jwtService: JwtService,
     private readonly eventBusService: EventBusService,
   ) {}
@@ -199,16 +207,121 @@ export class AuthService implements IAuthService {
     this.logger.log(`Password changed for user: ${userId}`);
   }
 
-  private async generateTokens(user: User): Promise<AuthTokens> {
-    const payload = {
-      sub: user.id.toString(),
-      email: user.email.toString(),
-      role: user.role,
-    };
+  /**
+   * SHA-256, not bcrypt.
+   *
+   * bcrypt is for low-entropy secrets a human chose, and it is deliberately
+   * not deterministic — which makes it useless here, because a refresh has to
+   * *find* the session by the token it was given. A signed JWT is already
+   * high-entropy, so a slow KDF buys nothing. What matters is that the stored
+   * value is not the token: a leaked sessions table must not be a set of
+   * usable credentials.
+   */
+  private hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
 
-    return {
-      accessToken: this.jwtService.sign(payload, { expiresIn: '15m' }),
-      refreshToken: this.jwtService.sign(payload, { expiresIn: '7d' }),
-    };
+  private async generateTokens(user: User): Promise<AuthTokens> {
+    const accessToken = this.jwtService.sign(
+      {
+        sub: user.id.toString(),
+        email: user.email.toString(),
+        role: user.role,
+        type: 'access',
+      },
+      { expiresIn: '15m' },
+    );
+
+    // `sid` is what makes each refresh token unique.
+    //
+    // A JWT's `iat` has one-second granularity, so a payload of {sub, type}
+    // alone produces a byte-identical token for two refreshes in the same
+    // second — and then the new session's hash equals the old one's, the
+    // lookup finds the wrong row, and rotation collapses. Found by a test that
+    // rotated twice quickly; no amount of reading would have shown it.
+    const sessionId = randomUUID();
+
+    // Carries no role and no email: a refresh token is not a credential for
+    // reaching anything, only for obtaining an access token. Before this, both
+    // tokens had identical payloads, so a refresh token simply WAS an access
+    // token with a seven-day life.
+    const refreshToken = this.jwtService.sign(
+      { sub: user.id.toString(), type: 'refresh', sid: sessionId },
+      { expiresIn: '7d' },
+    );
+
+    await this.sessionRepository.save(
+      new UserSession(
+        sessionId,
+        user.id.toString(),
+        this.hashToken(refreshToken),
+      ),
+    );
+
+    return { accessToken, refreshToken };
+  }
+
+  async refresh(refreshToken: string): Promise<AuthTokens> {
+    let payload: { sub: string; type?: string };
+    try {
+      payload = this.jwtService.verify(refreshToken);
+    } catch {
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+
+    if (payload.type !== 'refresh') {
+      throw new UnauthorizedError('Not a refresh token');
+    }
+
+    const session = await this.sessionRepository.findByRefreshTokenHash(
+      this.hashToken(refreshToken),
+    );
+
+    if (!session) {
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+
+    if (session.isRevoked) {
+      // A revoked session presented again is the one signal a stolen refresh
+      // token gives off: the legitimate holder rotated it, and someone still
+      // has the old one. Which of the two is the thief is unknowable, so end
+      // every session for this user and make them log in again.
+      this.logger.warn(
+        `Revoked refresh token reused for user ${session.userId} — revoking all sessions`,
+      );
+      await this.sessionRepository.revokeByUserId(session.userId);
+      throw new UnauthorizedError('Refresh token has been revoked');
+    }
+
+    if (session.isExpired) {
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+
+    const user = await this.userRepository.findById(new UserId(session.userId));
+    if (!user || !user.isActive) {
+      throw new UnauthorizedError('Invalid credentials');
+    }
+
+    // Revoke rather than overwrite the hash. Overwriting would erase the only
+    // evidence that the old token ever existed, and with it the ability to
+    // detect its reuse above.
+    session.revoke();
+    await this.sessionRepository.save(session);
+
+    return this.generateTokens(user);
+  }
+
+  async logout(refreshToken: string): Promise<void> {
+    const session = await this.sessionRepository.findByRefreshTokenHash(
+      this.hashToken(refreshToken),
+    );
+
+    // Silent on an unknown token: whether a given token exists is not
+    // something an unauthenticated caller should be able to probe for.
+    if (!session || session.isRevoked) return;
+
+    session.revoke();
+    await this.sessionRepository.save(session);
+    this.logger.log(`Session revoked for user ${session.userId}`);
   }
 }
