@@ -9,13 +9,13 @@ import { ArchiveCatalogUseCase } from './application/use-cases/archive-catalog.u
 import { GetCatalogTreeUseCase } from './application/use-cases/get-catalog-tree.use-case';
 import { GetCatalogUseCase } from './application/use-cases/get-catalog.use-case';
 import { CatalogController } from './adapters/inbound/controllers/catalog.controller';
-import { EventBusModule } from '../../shared/adapters/event-bus/event-bus.module';
+import { OutboxModule } from '../../shared/adapters/outbox/outbox.module';
 import { RequestContextModule } from '../../shared/adapters/request-context/request-context.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TypeOrmCatalog], 'catalog'),
-    EventBusModule,
+    OutboxModule.forContext('catalog'),
     // Every module whose controllers use JwtAuthGuard needs this: the guard
     // now injects RequestContextService to publish the caller's identity.
     RequestContextModule,

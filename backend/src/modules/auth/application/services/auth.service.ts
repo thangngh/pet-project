@@ -20,7 +20,8 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from '../../../../shared/domain/errors/domain-error';
-import { EventBusService } from '../../../../shared/adapters/event-bus/event-bus.service';
+import { Outbox } from '../../../../shared/adapters/outbox/outbox';
+import { OUTBOX } from '../../../../shared/adapters/outbox/outbox.module';
 import { UserSession } from '../../domain/entities/user-session.entity';
 import {
   USER_SESSION_REPOSITORY,
@@ -44,7 +45,7 @@ export class AuthService implements IAuthService {
     @Inject(USER_SESSION_REPOSITORY)
     private readonly sessionRepository: IUserSessionRepository,
     private readonly jwtService: JwtService,
-    private readonly eventBusService: EventBusService,
+    @Inject(OUTBOX('auth')) private readonly outbox: Outbox,
   ) {}
 
   async register(input: RegisterUserInput): Promise<AuthTokens> {
@@ -63,8 +64,13 @@ export class AuthService implements IAuthService {
 
     const user = User.create(email, password);
 
-    await this.userRepository.save(user);
-    await this.eventBusService.publishEvents(user.events);
+    // The user row and its UserCreated message commit together. Publishing
+    // after the save left a window where the process could die having created
+    // an account with no profile and no record that one was owed.
+    await this.outbox.transaction(async (tx) => {
+      await this.userRepository.save(user, tx);
+      await this.outbox.write(user.events, tx);
+    });
     user.clearEvents();
 
     const tokens = await this.generateTokens(user);
@@ -166,8 +172,10 @@ export class AuthService implements IAuthService {
     const hashed = new Password(await hash(plaintext.getValue(), 10), true);
 
     const admin = User.create(emailVo, hashed, ROLE_ADMIN);
-    await this.userRepository.save(admin);
-    await this.eventBusService.publishEvents(admin.events);
+    await this.outbox.transaction(async (tx) => {
+      await this.userRepository.save(admin, tx);
+      await this.outbox.write(admin.events, tx);
+    });
     admin.clearEvents();
 
     this.logger.log(`Admin created: ${email}`);

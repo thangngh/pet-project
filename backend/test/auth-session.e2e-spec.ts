@@ -76,7 +76,7 @@ describe('sessions and refresh (e2e)', () => {
     // Signed with the same secret, so without the `type` claim check this
     // authenticated every endpoint for seven days.
     request(app.getHttpServer())
-      .get('/api/v1/me')
+      .get('/api/v1/auth/profile')
       .set('Authorization', `Bearer ${refreshToken}`)
       .expect(401));
 
@@ -95,8 +95,12 @@ describe('sessions and refresh (e2e)', () => {
     // silently collapsed.
     expect(res.body.refreshToken).not.toBe(refreshToken);
 
+    // Auth's own profile, not /me: since the outbox landed, the user profile
+    // is created by a poller and is eventually consistent, so a read of /me
+    // straight after registering can legitimately 404. This test is about
+    // tokens.
     await request(app.getHttpServer())
-      .get('/api/v1/me')
+      .get('/api/v1/auth/profile')
       .set('Authorization', `Bearer ${res.body.accessToken}`)
       .expect(200);
 

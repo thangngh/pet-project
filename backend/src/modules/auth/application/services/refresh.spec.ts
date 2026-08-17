@@ -30,7 +30,10 @@ const deps = () => ({
     sign: jest.fn().mockImplementation((p) => `signed:${p.type}`),
     verify: jest.fn(),
   },
-  eventBus: { publish: jest.fn(), publishEvents: jest.fn() },
+  outbox: {
+    transaction: jest.fn(async (work: any) => work({ __tx: true })),
+    write: jest.fn(),
+  },
 });
 
 const build = (d: ReturnType<typeof deps>) =>
@@ -38,7 +41,7 @@ const build = (d: ReturnType<typeof deps>) =>
     d.userRepository as any,
     d.sessionRepository as any,
     d.jwtService as any,
-    d.eventBus as any,
+    d.outbox as any,
   );
 
 const savedSession = (d: ReturnType<typeof deps>, call = 0): UserSession =>

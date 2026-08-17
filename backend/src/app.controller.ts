@@ -1,5 +1,5 @@
 import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service';
+import { AppService, HealthReport } from './app.service';
 import { Public } from './modules/auth/adapters/outbound/auth/public.decorator';
 import { SkipGate } from './shared/adapters/feature-gate/skip-gate.decorator';
 
@@ -10,7 +10,7 @@ export class AppController {
   @Public()
   @SkipGate()
   @Get('health')
-  getHealth(): { status: string; timestamp: string } {
+  getHealth(): Promise<HealthReport> {
     return this.appService.getHealth();
   }
 }

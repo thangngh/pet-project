@@ -14,14 +14,14 @@ import { RequestContextModule } from '../../shared/adapters/request-context/requ
 import { AUTH_SERVICE } from './application/ports/auth-service.port';
 import { JwtStrategy } from './adapters/outbound/auth/jwt.strategy';
 import { AuthService } from './application/services/auth.service';
-import { EventBusModule } from '../../shared/adapters/event-bus/event-bus.module';
+import { OutboxModule } from '../../shared/adapters/outbox/outbox.module';
 import { AuthController } from './adapters/inbound/controllers/auth.controller';
 import { AttributesGuard } from './adapters/outbound/auth/attributes.guard';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TypeOrmUserEntity, TypeOrmUserSession], 'auth'),
-    EventBusModule,
+    OutboxModule.forContext('auth'),
     RequestContextModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

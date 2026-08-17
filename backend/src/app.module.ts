@@ -4,6 +4,10 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { SharedAdaptersModule } from './shared/adapters/shared-adapters.module';
 import { TypeOrmModule } from './shared/adapters/persistence/typeorm/typeorm.module';
+import {
+  IntegrationEventDispatcherModule,
+  OutboxRunnerModule,
+} from './shared/adapters/outbox/outbox.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
@@ -15,10 +19,12 @@ import { LoggingInterceptor } from './shared/adapters/logger/logging.interceptor
   imports: [
     SharedAdaptersModule,
     TypeOrmModule,
+    IntegrationEventDispatcherModule,
     AuthModule,
     UserModule,
     CatalogModule,
     ProductModule,
+    OutboxRunnerModule.register(),
   ],
   controllers: [AppController],
   providers: [

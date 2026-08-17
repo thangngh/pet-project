@@ -13,7 +13,10 @@ const deps = () => ({
     revokeByUserId: jest.fn(),
   },
   jwtService: { sign: jest.fn().mockReturnValue('token') },
-  eventBus: { publish: jest.fn(), publishEvents: jest.fn() },
+  outbox: {
+    transaction: jest.fn(async (work: any) => work({ __tx: true })),
+    write: jest.fn(),
+  },
 });
 
 const build = (d: ReturnType<typeof deps>) =>
@@ -21,7 +24,7 @@ const build = (d: ReturnType<typeof deps>) =>
     d.userRepository as any,
     d.sessionRepository as any,
     d.jwtService as any,
-    d.eventBus as any,
+    d.outbox as any,
   );
 
 const savedUser = (d: ReturnType<typeof deps>): User =>
@@ -84,15 +87,25 @@ describe('AuthService.register', () => {
     });
   });
 
-  it('publishes UserCreated and clears the aggregate afterwards', async () => {
+  it('enqueues UserCreated in the same transaction as the user row', async () => {
     const d = deps();
     await build(d).register({
       email: 'someone@example.com',
       password: 'Str0ngPass',
     });
 
-    expect(d.eventBus.publishEvents).toHaveBeenCalledTimes(1);
-    expect(d.eventBus.publishEvents.mock.calls[0][0]).toHaveLength(1);
+    expect(d.outbox.transaction).toHaveBeenCalledTimes(1);
+    expect(d.outbox.write).toHaveBeenCalledTimes(1);
+
+    const [events, tx] = d.outbox.write.mock.calls[0];
+    expect(events).toHaveLength(1);
+
+    // Same transaction manager the user row was written with — the one thing
+    // that makes an outbox worth having. If they differ, the process can die
+    // between the two writes and lose the event, which is what publishing
+    // after the save already did.
+    expect(tx).toBe(d.userRepository.save.mock.calls[0][1]);
+
     expect(savedUser(d).events).toHaveLength(0);
   });
 });

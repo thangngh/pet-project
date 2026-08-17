@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { IUserRepository } from '../../../domain/ports/user-repository.port';
 import { User } from '../../../domain/entities/user.entity';
 import { UserId } from '../../../domain/value-objects/user-id.value-object';
@@ -32,9 +32,12 @@ export class UserRepository implements IUserRepository {
     return entities.map((e) => this.toDomain(e));
   }
 
-  async save(user: User): Promise<void> {
-    const entity = this.toPersistence(user);
-    await this.repo.save(entity);
+  async save(user: User, tx?: unknown): Promise<void> {
+    const repo = tx
+      ? (tx as EntityManager).getRepository(TypeOrmUserEntity)
+      : this.repo;
+
+    await repo.save(this.toPersistence(user));
 
     // Deliberately does NOT clear the aggregate's events. The use case
     // publishes them after this returns and clears them itself; clearing here

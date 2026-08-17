@@ -8,6 +8,8 @@ import { TypeOrmUserProfile } from './modules/user/adapters/outbound/persistence
 import { TypeOrmCatalog } from './modules/catalog/adapters/outbound/persistence/typeorm-catalog.entity';
 import { TypeOrmProduct } from './modules/product/adapters/outbound/persistence/typeorm-product.entity';
 import { DB_CONTEXTS } from './shared/adapters/config/context-db.config';
+import { OutboxMessage } from './shared/adapters/outbox/outbox-message.entity';
+import { OUTBOX_CONTEXTS } from './shared/adapters/outbox/outbox.module';
 
 /**
  * Resolves every provider in the real AppModule graph with the database
@@ -26,6 +28,10 @@ describe('AppModule wiring', () => {
     [TypeOrmUserProfile, 'user'],
     [TypeOrmCatalog, 'catalog'],
     [TypeOrmProduct, 'product'],
+    // One outbox per producing context, on that context's own connection.
+    ...OUTBOX_CONTEXTS.map(
+      (context) => [OutboxMessage, context] as [new () => unknown, string],
+    ),
   ];
 
   const build = () => {
@@ -35,6 +41,8 @@ describe('AppModule wiring', () => {
       builder.overrideProvider(getDataSourceToken(context)).useValue({
         isInitialized: true,
         destroy: jest.fn(),
+        // The outbox opens transactions on its context's data source.
+        transaction: jest.fn(),
       } as unknown as DataSource);
     }
 
