@@ -47,6 +47,37 @@ describe('AuthService.register', () => {
     expect(savedUser(d).role).not.toBe('admin');
   });
 
+  // The case a DTO cannot cover. The global ValidationPipe gives a good 400 at
+  // the HTTP boundary, but AuthService can be called with no DTO in sight —
+  // by the admin seed, by a future use case, by a test. The rule has to be
+  // unskippable in the value object too, so it runs for every caller.
+  describe('password strength, with no DTO involved', () => {
+    it.each(['a', 'short', 'nouppercase1', 'NoDigitsHere'])(
+      'rejects %p',
+      async (password) => {
+        const d = deps();
+        await expect(
+          build(d).register({ email: 'someone@example.com', password }),
+        ).rejects.toThrow(/password/i);
+
+        expect(d.userRepository.save).not.toHaveBeenCalled();
+      },
+    );
+
+    it('stores a hash, never the plaintext', async () => {
+      const d = deps();
+      await build(d).register({
+        email: 'someone@example.com',
+        password: 'Str0ngPass',
+      });
+
+      const stored = savedUser(d).password;
+      expect(stored.getValue()).not.toBe('Str0ngPass');
+      expect(stored.isHashed()).toBe(true);
+      expect(stored.getValue()).toMatch(/^\$2[aby]\$/);
+    });
+  });
+
   it('publishes UserCreated and clears the aggregate afterwards', async () => {
     const d = deps();
     await build(d).register({

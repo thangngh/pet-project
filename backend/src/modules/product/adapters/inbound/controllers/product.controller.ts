@@ -28,6 +28,7 @@ import { RemoveMediaUseCase } from '../../../application/use-cases/remove-media.
 import { CreateProductDto } from '../../../application/dto/create-product.dto';
 import { UpdateProductDto } from '../../../application/dto/update-product.dto';
 import { SearchProductDto } from '../../../application/dto/search-product.dto';
+import { ROLE_ADMIN } from '../../../../auth/domain/constants/role.constants';
 
 @Controller('products')
 @UseGuards(JwtAuthGuard)
@@ -49,7 +50,7 @@ export class ProductController {
   @Post()
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async create(@Body() dto: CreateProductDto) {
     const userId = this.requestCtx.getIdentity()?.userId;
     if (!userId) throw new UnauthorizedException();
@@ -64,7 +65,7 @@ export class ProductController {
   @Patch(':id')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async update(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.updateProduct.execute(id, dto.name, dto.description);
   }
@@ -72,7 +73,7 @@ export class ProductController {
   @Post(':id/publish')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async publish(@Param('id') id: string) {
     return this.publishProduct.execute(id);
   }
@@ -80,7 +81,7 @@ export class ProductController {
   @Post(':id/archive')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async archive(@Param('id') id: string) {
     await this.archiveProduct.execute(id);
     return { message: 'Product archived' };
@@ -101,7 +102,7 @@ export class ProductController {
   @Post(':id/attributes')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async addAttr(
     @Param('id') id: string,
     @Body('name') name: string,
@@ -113,7 +114,7 @@ export class ProductController {
   @Delete(':id/attributes/:attrId')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async removeAttr(@Param('id') id: string, @Param('attrId') attrId: string) {
     return this.removeAttribute.execute(id, attrId);
   }
@@ -121,7 +122,7 @@ export class ProductController {
   @Post(':id/media')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async addMed(
     @Param('id') id: string,
     @Body('url') url: string,
@@ -134,7 +135,7 @@ export class ProductController {
   @Delete(':id/media/:mediaId')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async removeMed(@Param('id') id: string, @Param('mediaId') mediaId: string) {
     return this.removeMedia.execute(id, mediaId);
   }

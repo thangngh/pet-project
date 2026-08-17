@@ -3,8 +3,9 @@ import { UserId } from '../value-objects/user-id.value-object';
 import { Email } from '../value-objects/email.value-object';
 import { Password } from '../value-objects/password.value-object';
 import { UserCreatedEvent } from '../../../../shared/adapters/event-bus/integration-events/user-created.event';
+import { ROLE_USER, UserRole } from '../constants/role.constants';
 
-export type UserRole = 'admin' | 'user';
+export { UserRole };
 
 export class User {
   private readonly _id: UserId;
@@ -20,7 +21,7 @@ export class User {
     id: UserId,
     email: Email,
     password: Password,
-    role: UserRole = 'user',
+    role: UserRole = ROLE_USER,
     isActive = true,
     createdAt?: Date,
     updatedAt?: Date,
@@ -37,7 +38,7 @@ export class User {
   static create(
     email: Email,
     password: Password,
-    role: UserRole = 'user',
+    role: UserRole = ROLE_USER,
   ): User {
     const id = new UserId(crypto.randomUUID());
     const user = new User(id, email, password, role);
@@ -92,6 +93,19 @@ export class User {
   }
   changeEmail(newEmail: Email): void {
     this._email = newEmail;
+    this._updatedAt = new Date();
+  }
+
+  /**
+   * The only way a user's role changes after creation.
+   *
+   * Registration cannot set a role — that is how a public endpoint used to be
+   * able to grant itself admin. Reaching this method requires an authorised
+   * caller, checked at the controller.
+   */
+  changeRole(newRole: UserRole): void {
+    if (this._role === newRole) return;
+    this._role = newRole;
     this._updatedAt = new Date();
   }
 }

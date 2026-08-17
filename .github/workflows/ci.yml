@@ -53,6 +53,10 @@ jobs:
       DB_PRODUCT_POOL_SIZE: 2
 
       JWT_SECRET: ci-secret-not-used-outside-ci-0123456789
+
+      # RBAC is on here because the e2e suite asserts it denies. Running CI
+      # with it off would make the admin-only tests pass for the wrong reason.
+      FEATURE_RBAC: 'true'
       FEATURE_USER_PROFILE: 'true'
       FEATURE_PRODUCT_CATALOG: 'true'
 

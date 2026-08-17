@@ -1,4 +1,5 @@
 import { User } from '../../domain/entities/user.entity';
+import { UserRole } from '../../domain/constants/role.constants';
 
 export interface AuthTokens {
   accessToken: string;
@@ -37,4 +38,18 @@ export interface IAuthService {
     oldPassword: string,
     newPassword: string,
   ): Promise<void>;
+
+  /**
+   * Promote or demote a user. Authorisation is the caller's job — the
+   * controller gates it with @Roles(ROLE_ADMIN); this only enforces that the
+   * user exists.
+   */
+  setUserRole(userId: string, role: UserRole): Promise<UserProfileOutput>;
+
+  /**
+   * Creates the admin if no user holds that email, and does nothing if one
+   * already does. Used by the seed (pnpm seed:admin) to solve the bootstrap:
+   * nothing else can create the first admin, because promoting requires one.
+   */
+  ensureAdmin(email: string, password: string): Promise<'created' | 'exists'>;
 }

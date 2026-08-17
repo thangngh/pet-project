@@ -14,6 +14,7 @@ import { User } from '../../domain/entities/user.entity';
 import { UserId } from '../../domain/value-objects/user-id.value-object';
 import { Email } from '../../domain/value-objects/email.value-object';
 import { Password } from '../../domain/value-objects/password.value-object';
+import { ROLE_ADMIN, UserRole } from '../../domain/constants/role.constants';
 import {
   NotFoundError,
   UnauthorizedError,
@@ -46,8 +47,11 @@ export class AuthService implements IAuthService {
       throw new UnauthorizedException('Email already registered');
     }
 
-    const hashedPassword = await hash(input.password, 10);
-    const password = new Password(hashedPassword, true);
+    // Construct from the plaintext FIRST, so the strength rule runs. Both
+    // call sites used to hash and then pass hashed: true, which skips
+    // validation entirely — the rule existed and never once executed.
+    const plaintext = new Password(input.password);
+    const password = new Password(await hash(plaintext.getValue(), 10), true);
 
     const user = User.create(email, password);
 
@@ -105,6 +109,63 @@ export class AuthService implements IAuthService {
     };
   }
 
+  async setUserRole(
+    userId: string,
+    role: UserRole,
+  ): Promise<UserProfileOutput> {
+    const user = await this.userRepository.findById(new UserId(userId));
+
+    if (!user) {
+      throw new NotFoundError('User', userId);
+    }
+
+    user.changeRole(role);
+    await this.userRepository.save(user);
+    this.logger.log(`Role changed for user ${userId}: ${role}`);
+
+    return {
+      id: user.id.toString(),
+      email: user.email.toString(),
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+    };
+  }
+
+  /**
+   * Idempotent by design: the seed runs on every deploy and in CI, and a
+   * second run must be a no-op rather than an error or a second admin.
+   */
+  async ensureAdmin(
+    email: string,
+    password: string,
+  ): Promise<'created' | 'exists'> {
+    const emailVo = new Email(email);
+
+    const existing = await this.userRepository.findByEmail(emailVo);
+    if (existing) {
+      if (existing.role !== ROLE_ADMIN) {
+        existing.changeRole(ROLE_ADMIN);
+        await this.userRepository.save(existing);
+        this.logger.log(`Existing user promoted to admin: ${email}`);
+      }
+      return 'exists';
+    }
+
+    // Validates before hashing, so a weak ADMIN_PASSWORD stops the seed
+    // rather than creating an admin nobody intended to be reachable.
+    const plaintext = new Password(password);
+    const hashed = new Password(await hash(plaintext.getValue(), 10), true);
+
+    const admin = User.create(emailVo, hashed, ROLE_ADMIN);
+    await this.userRepository.save(admin);
+    await this.eventBusService.publishEvents(admin.events);
+    admin.clearEvents();
+
+    this.logger.log(`Admin created: ${email}`);
+    return 'created';
+  }
+
   async changePassword(
     userId: string,
     oldPassword: string,
@@ -129,8 +190,10 @@ export class AuthService implements IAuthService {
       throw new UnauthorizedError('Current password is incorrect');
     }
 
-    const hashedPassword = await hash(newPassword, 10);
-    user.changePassword(new Password(hashedPassword, true));
+    const plaintext = new Password(newPassword);
+    user.changePassword(
+      new Password(await hash(plaintext.getValue(), 10), true),
+    );
 
     await this.userRepository.save(user);
     this.logger.log(`Password changed for user: ${userId}`);

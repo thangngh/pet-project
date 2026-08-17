@@ -22,7 +22,8 @@
     "migration:run": "node scripts/migrate.mjs run",
     "migration:revert": "node scripts/migrate.mjs revert",
     "migration:generate": "node scripts/migrate.mjs generate",
-    "migration:show": "node scripts/migrate.mjs show"
+    "migration:show": "node scripts/migrate.mjs show",
+    "seed:admin": "node --no-warnings -r ts-node/register -r tsconfig-paths/register src/seed-admin.ts"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
