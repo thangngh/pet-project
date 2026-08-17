@@ -12,7 +12,10 @@ import { CatalogController } from './adapters/inbound/controllers/catalog.contro
 import { EventBusModule } from '../../shared/adapters/event-bus/event-bus.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TypeOrmCatalog]), EventBusModule],
+  imports: [
+    TypeOrmModule.forFeature([TypeOrmCatalog], 'catalog'),
+    EventBusModule,
+  ],
   controllers: [CatalogController],
   providers: [
     { provide: CATALOG_REPOSITORY, useClass: CatalogRepository },

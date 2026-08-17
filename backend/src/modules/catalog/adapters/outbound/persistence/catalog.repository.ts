@@ -8,7 +8,7 @@ import { ICatalogRepository } from '../../../domain/ports/catalog.repository.por
 @Injectable()
 export class CatalogRepository implements ICatalogRepository {
   constructor(
-    @InjectRepository(TypeOrmCatalog)
+    @InjectRepository(TypeOrmCatalog, 'catalog')
     private readonly repo: Repository<TypeOrmCatalog>,
   ) {}
 

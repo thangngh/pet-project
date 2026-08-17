@@ -9,7 +9,7 @@ import { Phone } from '../../../domain/value-objects/phone.value-object';
 @Injectable()
 export class UserProfileRepository implements IUserProfileRepository {
   constructor(
-    @InjectRepository(TypeOrmUserProfile)
+    @InjectRepository(TypeOrmUserProfile, 'user')
     private readonly repo: Repository<TypeOrmUserProfile>,
   ) {}
 

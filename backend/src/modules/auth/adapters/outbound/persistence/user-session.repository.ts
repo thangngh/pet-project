@@ -8,7 +8,7 @@ import { IUserSessionRepository } from '../../../domain/ports/user-session.repos
 @Injectable()
 export class UserSessionRepository implements IUserSessionRepository {
   constructor(
-    @InjectRepository(TypeOrmUserSession)
+    @InjectRepository(TypeOrmUserSession, 'auth')
     private readonly repo: Repository<TypeOrmUserSession>,
   ) {}
 

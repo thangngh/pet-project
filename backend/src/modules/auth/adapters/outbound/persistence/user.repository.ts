@@ -11,7 +11,7 @@ import { TypeOrmUserEntity } from './typeorm-user.entity';
 @Injectable()
 export class UserRepository implements IUserRepository {
   constructor(
-    @InjectRepository(TypeOrmUserEntity)
+    @InjectRepository(TypeOrmUserEntity, 'auth')
     private readonly repo: Repository<TypeOrmUserEntity>,
   ) {}
 

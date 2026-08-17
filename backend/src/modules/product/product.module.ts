@@ -20,7 +20,7 @@ import { RequestContextModule } from '../../shared/adapters/request-context/requ
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([TypeOrmProduct]),
+    TypeOrmModule.forFeature([TypeOrmProduct], 'product'),
     CqrsModule,
     RequestContextModule,
   ],

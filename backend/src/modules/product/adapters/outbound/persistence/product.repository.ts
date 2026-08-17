@@ -16,7 +16,7 @@ import {
 @Injectable()
 export class ProductRepository implements IProductRepository {
   constructor(
-    @InjectRepository(TypeOrmProduct)
+    @InjectRepository(TypeOrmProduct, 'product')
     private readonly repo: Repository<TypeOrmProduct>,
   ) {}
 
