@@ -1,16 +1,15 @@
 import { EventsHandler, IEventHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
+import { CatalogDeletedEvent } from '../../../../shared/adapters/event-bus/integration-events/catalog-deleted.event';
 import { PRODUCT_REPOSITORY, IProductRepository } from '../../domain/ports/product.repository.port';
 
-@EventsHandler()
-export class CatalogDeletedHandler implements IEventHandler {
+@EventsHandler(CatalogDeletedEvent)
+export class CatalogDeletedHandler implements IEventHandler<CatalogDeletedEvent> {
   constructor(
     @Inject(PRODUCT_REPOSITORY) private readonly repo: IProductRepository,
   ) {}
 
-  async handle(event: any): Promise<void> {
-    if (event.eventName === 'CatalogDeleted' && event.catalogId) {
-      await this.repo.archiveByCatalogId(event.catalogId);
-    }
+  async handle(event: CatalogDeletedEvent): Promise<void> {
+    await this.repo.archiveByCatalogId(event.catalogId);
   }
 }

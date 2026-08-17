@@ -10,13 +10,14 @@ import { USER_REPOSITORY } from './domain/ports/user-repository.port';
 import { AUTH_SERVICE } from './application/ports/auth-service.port';
 import { JwtStrategy } from './adapters/outbound/auth/jwt.strategy';
 import { AuthService } from './application/services/auth.service';
-import { EventBusService } from './application/services/event-bus.service';
+import { EventBusModule } from '../../shared/adapters/event-bus/event-bus.module';
 import { AuthController } from './adapters/inbound/controllers/auth.controller';
 import { AttributesGuard } from './adapters/outbound/auth/attributes.guard';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TypeOrmUserEntity]),
+    EventBusModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       useFactory: (configService: ConfigService) => ({
@@ -32,7 +33,6 @@ import { AttributesGuard } from './adapters/outbound/auth/attributes.guard';
       provide: AUTH_SERVICE,
       useClass: AuthService,
     },
-    EventBusService,
     JwtStrategy,
     {
       provide: USER_REPOSITORY,

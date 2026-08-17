@@ -1,4 +1,9 @@
+import { DomainEvent } from '../../../../shared/adapters/event-bus/domain-event';
+import { CatalogDeletedEvent } from '../../../../shared/adapters/event-bus/integration-events/catalog-deleted.event';
+
 export class Catalog {
+  private _events: DomainEvent[] = [];
+
   constructor(
     public readonly id: string,
     public name: string,
@@ -15,7 +20,17 @@ export class Catalog {
   }
 
   archive(): void {
+    if (this.status === 'archived') return;
     this.status = 'archived';
     this.updatedAt = new Date();
+    this._events.push(new CatalogDeletedEvent(this.id));
+  }
+
+  get events(): DomainEvent[] {
+    return [...this._events];
+  }
+
+  clearEvents(): void {
+    this._events = [];
   }
 }

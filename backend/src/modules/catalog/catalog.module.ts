@@ -9,9 +9,10 @@ import { ArchiveCatalogUseCase } from './application/use-cases/archive-catalog.u
 import { GetCatalogTreeUseCase } from './application/use-cases/get-catalog-tree.use-case';
 import { GetCatalogUseCase } from './application/use-cases/get-catalog.use-case';
 import { CatalogController } from './adapters/inbound/controllers/catalog.controller';
+import { EventBusModule } from '../../shared/adapters/event-bus/event-bus.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TypeOrmCatalog])],
+  imports: [TypeOrmModule.forFeature([TypeOrmCatalog]), EventBusModule],
   controllers: [CatalogController],
   providers: [
     { provide: CATALOG_REPOSITORY, useClass: CatalogRepository },

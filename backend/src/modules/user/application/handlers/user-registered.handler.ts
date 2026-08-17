@@ -1,6 +1,6 @@
 import { EventsHandler, IEventHandler } from '@nestjs/cqrs';
 import { Inject } from '@nestjs/common';
-import { UserCreatedEvent } from '../../domain/entities/user-created.event';
+import { UserCreatedEvent } from '../../../../shared/adapters/event-bus/integration-events/user-created.event';
 import { USER_PROFILE_REPOSITORY, IUserProfileRepository } from '../../domain/ports/user-profile.repository.port';
 import { UserProfile } from '../../domain/entities/user-profile.entity';
 

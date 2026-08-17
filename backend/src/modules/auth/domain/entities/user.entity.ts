@@ -2,7 +2,7 @@ import { DomainEvent } from '../../../../shared/adapters/event-bus/domain-event'
 import { UserId } from '../value-objects/user-id.value-object';
 import { Email } from '../value-objects/email.value-object';
 import { Password } from '../value-objects/password.value-object';
-import { UserCreatedEvent } from './user-created.event';
+import { UserCreatedEvent } from '../../../../shared/adapters/event-bus/integration-events/user-created.event';
 
 export type UserRole = 'admin' | 'user';
 
@@ -37,7 +37,7 @@ export class User {
   static create(email: Email, password: Password, role: UserRole = 'user'): User {
     const id = new UserId(crypto.randomUUID());
     const user = new User(id, email, password, role);
-    user.addEvent(new UserCreatedEvent(id, email));
+    user.addEvent(new UserCreatedEvent(id.toString(), email.toString()));
     return user;
   }
 

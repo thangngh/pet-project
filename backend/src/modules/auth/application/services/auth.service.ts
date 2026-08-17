@@ -10,7 +10,7 @@ import {
   NotFoundError,
   UnauthorizedError,
 } from '../../../../shared/domain/errors/domain-error';
-import { EventBusService } from './event-bus.service';
+import { EventBusService } from '../../../../shared/adapters/event-bus/event-bus.service';
 import {
   IAuthService,
   AuthTokens,
@@ -45,6 +45,7 @@ export class AuthService implements IAuthService {
 
     await this.userRepository.save(user);
     await this.eventBusService.publishEvents(user.events);
+    user.clearEvents();
 
     const tokens = await this.generateTokens(user);
     this.logger.log(`User registered: ${email.toString()}`);

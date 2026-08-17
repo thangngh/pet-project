@@ -4,6 +4,7 @@ import { UpdateCatalogUseCase } from './update-catalog.use-case';
 import { ArchiveCatalogUseCase } from './archive-catalog.use-case';
 import { Catalog } from '../../domain/entities/catalog.entity';
 import { NotFoundError } from '../../../../shared/domain/errors/domain-error';
+import { CatalogDeletedEvent } from '../../../../shared/adapters/event-bus/integration-events/catalog-deleted.event';
 
 const repo = () => ({
   save: jest.fn(),
@@ -11,6 +12,8 @@ const repo = () => ({
   findAll: jest.fn(),
   findChildren: jest.fn(),
 });
+
+const bus = () => ({ publish: jest.fn(), publishEvents: jest.fn() });
 
 describe('GetCatalogUseCase', () => {
   // Regression: this route previously ignored its id and returned the whole tree.
@@ -94,17 +97,63 @@ describe('ArchiveCatalogUseCase', () => {
     const catalog = new Catalog('c1', 'Dogs');
     r.findById.mockResolvedValue(catalog);
 
-    await new ArchiveCatalogUseCase(r as any).execute('c1');
+    await new ArchiveCatalogUseCase(r as any, bus() as any).execute('c1');
 
     expect(catalog.status).toBe('archived');
     expect(r.save).toHaveBeenCalledWith(catalog);
+  });
+
+  // Regression: archiving used to persist without emitting anything, so the
+  // products under the catalog were never archived.
+  it('publishes CatalogDeleted carrying the catalog id', async () => {
+    const r = repo();
+    const b = bus();
+    const catalog = new Catalog('c1', 'Dogs');
+    r.findById.mockResolvedValue(catalog);
+
+    await new ArchiveCatalogUseCase(r as any, b as any).execute('c1');
+
+    expect(b.publishEvents).toHaveBeenCalledTimes(1);
+    const published = b.publishEvents.mock.calls[0][0];
+    expect(published).toHaveLength(1);
+    expect(published[0]).toBeInstanceOf(CatalogDeletedEvent);
+    expect(published[0].catalogId).toBe('c1');
+  });
+
+  it('publishes after the catalog is saved', async () => {
+    const order: string[] = [];
+    const r = repo();
+    const b = bus();
+    const catalog = new Catalog('c1', 'Dogs');
+    r.findById.mockResolvedValue(catalog);
+    r.save.mockImplementation(async () => {
+      order.push('save');
+    });
+    b.publishEvents.mockImplementation(async () => {
+      order.push('publish');
+    });
+
+    await new ArchiveCatalogUseCase(r as any, b as any).execute('c1');
+
+    expect(order).toEqual(['save', 'publish']);
+  });
+
+  it('does not re-publish when the catalog is already archived', async () => {
+    const r = repo();
+    const b = bus();
+    const catalog = new Catalog('c1', 'Dogs', undefined, 'archived');
+    r.findById.mockResolvedValue(catalog);
+
+    await new ArchiveCatalogUseCase(r as any, b as any).execute('c1');
+
+    expect(b.publishEvents).toHaveBeenCalledWith([]);
   });
 
   it('throws NotFoundError for an unknown id', async () => {
     const r = repo();
     r.findById.mockResolvedValue(null);
     await expect(
-      new ArchiveCatalogUseCase(r as any).execute('nope'),
+      new ArchiveCatalogUseCase(r as any, bus() as any).execute('nope'),
     ).rejects.toThrow(NotFoundError);
   });
 });
