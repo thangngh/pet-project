@@ -5,10 +5,11 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
+// Registration is public, so it never accepts a role: the aggregate's default
+// applies. Promoting a user is a separate, authorised operation.
 export interface RegisterUserInput {
   email: string;
   password: string;
-  role?: 'admin' | 'user';
 }
 
 export interface LoginInput {

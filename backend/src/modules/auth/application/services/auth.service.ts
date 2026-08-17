@@ -41,7 +41,7 @@ export class AuthService implements IAuthService {
     const hashedPassword = await hash(input.password, 10);
     const password = new Password(hashedPassword, true);
 
-    const user = User.create(email, password, input.role);
+    const user = User.create(email, password);
 
     await this.userRepository.save(user);
     await this.eventBusService.publishEvents(user.events);

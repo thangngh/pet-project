@@ -16,7 +16,7 @@ after.
 | D2 | Register Nest's built-in `ValidationPipe` globally; delete the custom one | F02, F10 | proposed | yes |
 | D3 | TypeORM migrations, never `synchronize` outside tests | F03 | proposed | yes |
 | D4 | One database now, one pool per context, multi-database as the target | F04 | **accepted** | yes, by design |
-| D5 | Remove `role` from public registration before enabling RBAC | F20, F05 | proposed | yes |
+| D5 | Remove `role` from public registration before enabling RBAC | F20, F05 | **step 1 done**; RBAC still off | yes |
 | D6 | Enforce password strength in the value object, not only the DTO | F06, F15 | proposed | yes |
 | D7 | `GateException` extends `HttpException` with 503 | F07 | accepted | yes |
 | D8 | Refresh tokens: persist and rotate, using the `UserSession` that already exists | F08 | proposed | yes |
@@ -215,7 +215,8 @@ which is real today and independent of any split.
 
 ## D5 — Remove `role` from public registration, before enabling RBAC
 
-**Closes** F20, and unblocks F05. **Status** proposed.
+**Closes** F20, and unblocks F05. **Status** step 1 implemented 2026-08-17;
+steps 2 and 3 belong to spec-002.
 
 ### Context
 
@@ -239,12 +240,17 @@ spec-002 decides which. Until then, the first admin is created by a seed.
 
 ### Consequences
 
-- No client can choose its own role. If something in your workflow relies on
-  registering an admin through the public endpoint, it breaks — tell me and the
-  seed lands first.
-- Enabling RBAC makes eleven endpoints genuinely admin-only. Any existing caller
-  without an admin role starts getting 403. This is the change most likely to
-  surprise, which is why it is spec-002 and not spec-001.
+- No client can choose its own role. Confirmed with you first: nothing
+  registers an admin through the public endpoint.
+- **RBAC stays off for now, deliberately.** Step 1 removes the escalation path;
+  step 3 would make eleven endpoints genuinely admin-only at a moment when no
+  admin exists and there is no way to create one. Flipping the flag today would
+  lock those endpoints against everybody. The seed or promotion path comes
+  first, in spec-002 — that is the whole reason D5 is three ordered steps
+  rather than one change.
+- spec-002 must also settle **F22** before turning RBAC on: `role.constants.ts`
+  spells roles `'ADMIN'` while production uses `'admin'`, so the first person
+  to write `@Roles(ROLE_ADMIN)` builds a guard that denies everyone silently.
 
 ---
 
