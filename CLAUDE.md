@@ -1,721 +1,533 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code (claude.ai/code) working in this repository.
 
-## Project Overview
+## How to read this file
 
-Monolithic NestJS 10 API with Domain-Driven Design + Hexagonal Architecture (Ports & Adapters). Stack: TypeORM 0.3, PostgreSQL, Passport JWT, Winston, Throttler rate-limit, Axios HTTP, CQRS event bus.
+Every statement here is marked, because this file was once a plan that got read
+as a description — three gate artifacts recorded "Issues Found: None" for
+features that had never run, and the auth section described a port nothing
+implemented (see `docs/audit/audit-2026-08-17.md`).
 
-**Source in `backend/`** — all commands run from `backend/` directory. See [LICENSE](./LICENSE) for license terms.
+| Marker | Meaning |
+|---|---|
+| **[built]** | Exists in `backend/src` today and is exercised by a test |
+| **[plan]** | Intended design. **Not built.** Do not describe it as existing |
+| *(unmarked)* | A rule for how to write new code, not a claim about current code |
+
+If you change code so a **[plan]** becomes real, move the marker in the same
+commit. If you find a **[built]** claim that is false, that is a defect in this
+file — fix it here first, then decide about the code.
+
+## Project overview
+
+Monolithic NestJS 10 API, Domain-Driven Design + Hexagonal Architecture
+(Ports & Adapters). **[built]** Stack: TypeORM 0.3 on PostgreSQL 16, Passport
+JWT, Winston, Throttler, Axios, `@nestjs/cqrs` (used for its `EventBus` inside
+a context — *not* for cross-context delivery, see Outbox).
+
+**All source is under `backend/src/`.** Run every command from `backend/`.
+See [LICENSE](./LICENSE) for license terms.
+
+## Getting a clean clone running
+
+This is the whole sequence. It was verified from an empty database.
+
+```bash
+cd backend
+cp .env.example .env          # the file lives in backend/, not the repo root
+pnpm install                  # pnpm only — pnpm-lock.yaml is the one lockfile
+
+# A PostgreSQL 16 server on localhost:5432 with database `ddd_project`.
+docker compose up -d          # from the repo root — one postgres container
+
+pnpm migration:run            # REQUIRED. Nothing creates tables at boot:
+                              # synchronize is off everywhere, deliberately.
+pnpm seed:admin               # the only way to make the first admin
+pnpm start:dev                # :3001
+```
+
+Skipping `migration:run` gives a process that starts and then fails every
+request with `relation does not exist`. There is no auto-sync fallback and
+there should not be one.
+
+**[plan]** `docker compose up -d` has not been run in this repository's CI or
+in any session that produced these notes — the verification above used a local
+PostgreSQL 16 cluster. The compose file is believed correct and is unproven.
 
 ## Commands
 
-Source is in `backend/` — prefix all commands with `cd backend &&` or set working directory to `backend/`.
-
 ```bash
 # Dev
-cd backend && pnpm start:dev          # Watch mode on :3001
-cd backend && pnpm start:debug        # Debug + watch
+cd backend && pnpm start:dev          # watch mode on :3001
+cd backend && pnpm start:debug
 
-# Build
+# Build / lint
 cd backend && pnpm build
+cd backend && pnpm lint               # reports only; `lint:fix` writes
 
-# All tests
-cd backend && pnpm test               # Jest (src/**/*.spec.ts)
-cd backend && pnpm test:cov           # Coverage
-cd backend && pnpm test:e2e           # E2E (test/**/*.e2e-spec.ts)
+# Tests
+cd backend && pnpm test               # jest, src/**/*.spec.ts
+cd backend && pnpm test:cov
+cd backend && pnpm test:e2e           # test/**/*.e2e-spec.ts — needs a live DB
+cd backend && pnpm jest -- src/app.controller.spec.ts   # single file
 
-# Single test
-cd backend && pnpm jest -- src/app.controller.spec.ts
+# Migrations — per context, see "Persistence"
+cd backend && pnpm migration:run                     # every context
+cd backend && pnpm migration:show                    # every context
+cd backend && pnpm migration:revert   --context=catalog
+cd backend && pnpm migration:generate --context=catalog --name=AddThing
 
-# Lint
-cd backend && pnpm lint
+# Admin
+cd backend && pnpm seed:admin
 
-# Docker
-docker compose up -d              # Start all PostgreSQL services
-docker compose up -d postgres_auth # Start a specific service
-docker compose down               # Stop all
-docker compose down -v            # Stop and delete volumes (reset data)
-docker compose logs -f            # Follow logs
-docker compose ps                 # Service status
+# Docker (from the repo root)
+docker compose up -d                  # one postgres, all contexts share it
+docker compose -f docker-compose.multi-db.yml up -d   # one postgres per context
+docker compose down -v                # reset data
 ```
 
-## Architecture — Hexagonal (Ports & Adapters) = 4 DDD Layers
+When reading `pnpm test` output, check the **`Suites:`** line as well as
+`Tests:`. A suite that fails to compile contributes zero tests, so a broken
+suite can hide behind a rising pass count.
 
-Each layer maps a DDD architectural layer to a Hexagonal role:
+## Architecture — Hexagonal (Ports & Adapters) = 4 DDD layers
 
-| DDD Layer | Hexagonal Role | Directory | Description | NestJS Deps |
-|-----------|---------------|-----------|-------------|-------------|
-| **Domain** | Core (pure language) | `domain/` | Entities, VOs, domain events, outbound port interfaces | Pure TS — no imports from any package |
-| **Application** | Use cases | `application/` | One use case per feature, Command/Query handling center, DTOs | ✅ Injectable decorator only |
-| **Presentation** | Inbound adapters | `adapters/inbound/` | Controllers, guards, decorators — driving side | Full |
-| **Infrastructure** | Outbound adapters | `adapters/outbound/` | Persistence (TypeORM), external APIs, auth guards/strategies — driven side | Full |
+| DDD layer | Hexagonal role | Directory | NestJS deps |
+|---|---|---|---|
+| **Domain** | Core | `domain/` | Pure TS — no package imports |
+| **Application** | Use cases | `application/` | `@Injectable` / `@Inject` only |
+| **Presentation** | Inbound adapters | `adapters/inbound/` | Full |
+| **Infrastructure** | Outbound adapters | `adapters/outbound/` | Full |
 
-### Shared Kernel — 4 Layers
+### Dependency rule
 
-```
-backend/src/shared/
-  domain/                       # DDD: DOMAIN
-    value-objects/              # Base ValueObject<T> — frozen props, equals()
-    errors/                     # DomainError -> NotFoundError, ValidationError, UnauthorizedError
-  application/                  # DDD: APPLICATION
-    pipes/                      # Global ValidationPipe (class-validator + class-transformer)
-    filters/                    # GlobalExceptionFilter (DomainError -> HTTP mapping)
-  adapters/                     # DDD: INFRASTRUCTURE + PRESENTATION
-    config/                     # NestJS ConfigModule + Joi env validation (infrastructure)
-    logger/                     # Winston module + LoggingInterceptor (infrastructure)
-    rate-limit/                 # ThrottlerModule + global ThrottlerGuard (infrastructure)
-    http/                       # Axios HttpModule wrapper (infrastructure)
-    event-bus/                  # CQRS EventBus + DomainEvent base (infrastructure)
-    persistence/typeorm/        # TypeORM root, autoLoadEntities, async config (infrastructure)
-    feature-gate/               # @Gate decorator + GateGuard (presentation)
-    tenant/                     # TenantContext resolver (presentation)
-    request-context/            # RequestContext middleware + RequestIdentity type (presentation)
-```
-
-### Per-Bounded-Context Structure
-
-```
-backend/modules/<context>/
-  <context>.module.ts           # Composition root — wires ports -> adapters via useClass
-
-  domain/                       # DDD: DOMAIN LAYER — pure TypeScript, zero package imports
-    entities/                   # Aggregate roots (e.g. User, Product)
-    value-objects/              # Value objects (UserId, Email, Password)
-    ports/                      # OUTBOUND port interfaces (e.g. IUserRepository)
-
-  application/                  # DDD: APPLICATION LAYER — depends on domain ports only
-    ports/                      # INBOUND port interfaces (e.g. IAuthService)
-    use-cases/                  # ONE FILE per feature (RegisterUserUseCase, GetProfileUseCase)
-    handlers/                   # Command/Query handling center — dispatches to correct use case
-    services/                   # Orchestrators (EventBusService, shared UC logic)
-    dto/                        # Request/response DTOs
-
-  adapters/
-    inbound/                    # DDD: PRESENTATION LAYER — controllers, guards
-      controllers/              # Inject @Inject(AUTH_SERVICE) IAuthService, never concrete
-    outbound/                   # DDD: INFRASTRUCTURE LAYER — persistence, external
-      persistence/              # TypeORM entities + repository implementations
-      <integration>/            # External adapters (JWT strategy, API clients)
-```
-
-### Dependency Rule
-
-Dependencies point **inward** toward Domain:
+Dependencies point **inward**:
 
 ```
 Domain (pure TS — zero package imports)
-  <- Application (depends on domain ports only)
-    <- Adapters: inbound (controllers)/outbound (repositories) — never import concrete services
-      <- Composition root (module file wires tokens via useClass)
+  <- Application (domain ports only)
+    <- Adapters: inbound (controllers) / outbound (repositories)
+      <- Composition root (the module file wires tokens via useClass)
 ```
 
-**Golden rule:** Domain layer is **pure language** (TypeScript). Zero imports from any package — not `@nestjs/*`, not `uuid`, not `bcrypt`. Only language-level types (`string`, `Date`, `Record<>`, etc.). Domain entities, value objects, and port interfaces must compile with zero dependencies on any runtime package.
+**Golden rule:** the domain layer is pure language. No `@nestjs/*`, no `uuid`,
+no `bcrypt` — only `string`, `Date`, `Record<>` and friends. A controller may
+never import a concrete service class, only its port interface.
 
-A controller may never import a concrete service class — only its port interface.
+### Shared kernel — what is actually there
 
-## Authentication — Auth BC: Token Issuer + Middleware Port
-
-Auth is a **bounded context** (`backend/modules/auth/`). Two roles:
-
-1. **Token issuer** — Login → returns JWT or API Key
-2. **Middleware port provider** — exports `IAuthMiddlewarePort` for per-request validation
-
-### Complete Flow
+**[built]**, verified file by file:
 
 ```
-USER LOGIN → POST /auth/login → Auth BC → returns { accessToken, refreshToken }
-
-EVERY REQUEST:
-Client sends: Authorization: Bearer <jwt> or X-API-Key: <key>
-
-AuthGuard calls IAuthMiddlewarePort.validateToken(token)
-  → identity { userId, tenantId, roles } written to RequestContext
-
-AFTER AUTH SUCCESS → deeper layers:
-
-┌─ PRESENTATION ──── Controller reads identity from RequestContext
-│                   @Gate('feature') check → calls use case
-├─ APPLICATION ───── Reads userId from RequestContext for ownership
-│                   Option A: calls IAuthMiddlewarePort.validateApiKey() again
-│                   Option B: implements own security (HMAC, mTLS, signed payload)
-├─ DOMAIN ────────── Pure TS. Never sees auth types.
+backend/src/shared/
+  domain/
+    value-objects/value-object.ts      # base ValueObject<T> — frozen props, equals()
+    errors/domain-error.ts             # DomainError + 3 subclasses (see Errors)
+  application/
+    filters/global-exception.filter.ts # DomainError/HttpException -> HTTP
+  adapters/
+    config/                            # ConfigModule + Joi validation + context-db.config.ts
+    logger/                            # Winston module + LoggingInterceptor
+    rate-limit/                        # ThrottlerModule + global ThrottlerGuard
+    http/                              # Axios HttpModule wrapper
+    event-bus/                         # CQRS EventBus + DomainEvent base
+    event-bus/integration-events/      # cross-context event contracts + registry
+    outbox/                            # transactional outbox, poller, dispatcher, health
+    persistence/typeorm/               # four named data sources, one per context
+    feature-gate/                      # @Gate, @SkipGate, global GateGuard
+    request-context/                   # middleware, AsyncLocalStorage service, RequestIdentity
 ```
 
-### Auth Port Interface
+**[plan]** `shared/adapters/tenant/` — a `TenantContext` resolver. **Not
+built.** Multi-tenancy left scope; `RequestIdentity.attributes` is where a
+`tenantId` would go if it returns.
 
-```ts
-// backend/modules/auth/application/ports/auth-middleware.port.ts
-export const AUTH_MIDDLEWARE_PORT = 'AUTH_MIDDLEWARE_PORT';
+**[plan]** `shared/application/pipes/` — the global `ValidationPipe` is
+configured inline in `app.module.ts` as an `APP_PIPE` provider, not in a
+directory of its own. There is nothing to put there yet.
 
-export interface IAuthMiddlewarePort {
-  validateToken(token: string): Promise<RequestIdentity>;
-  validateApiKey(apiKey: string): Promise<RequestIdentity>;
-}
+### Per-bounded-context structure
+
+Contexts live in **`backend/src/modules/<context>/`** — `auth`, `user`,
+`catalog`, `product`. **[built]**
+
+```
+backend/src/modules/<context>/
+  <context>.module.ts           # composition root — wires ports -> adapters
+
+  domain/                       # pure TypeScript, zero package imports
+    entities/                   # aggregate roots
+    value-objects/              # Email, Password, UserId
+    ports/                      # OUTBOUND port interfaces (IUserRepository)
+
+  application/
+    ports/                      # INBOUND port interfaces (IAuthService)
+    use-cases/                  # one file per feature
+    handlers/                   # integration-event consumers
+    dto/                        # request/response DTOs
+
+  adapters/
+    inbound/controllers/        # inject port tokens, never concrete classes
+    outbound/persistence/       # TypeORM entities, repositories, migrations
+    outbound/<integration>/     # JWT strategy, guards, API clients
 ```
 
-Other BCs depend on this port interface, never on auth domain types.
+Not every context has every directory, and that is fine — an empty directory is
+worse than an absent one. What each has today:
 
-### Where Auth Lives
+| Context | `use-cases/` | `handlers/` | `value-objects/` | Outbox |
+|---|---|---|---|---|
+| `auth` | **no** — see below | no | yes | yes |
+| `user` | yes (2) | yes (1) | yes | no |
+| `catalog` | yes (5) | no | no | yes |
+| `product` | yes (10) | yes (1) | no | no |
 
-| Component | Location |
-|-----------|----------|
-| Domain (User, credentials, tokens) | `backend/modules/auth/domain/` |
-| Use cases (register, login, refresh) | `backend/modules/auth/application/` |
-| Auth middleware port interface | `backend/modules/auth/application/ports/` |
-| Controllers | `backend/modules/auth/adapters/inbound/` |
-| AuthGuard, strategies, decorators | `backend/modules/auth/adapters/outbound/auth/` |
+**Auth is the exception to one-use-case-per-feature.** Its features live as
+methods on a single `AuthService` behind `IAuthService`. This is drift from the
+rule below, documented rather than fixed: the methods share session handling,
+token signing and hashing, and splitting them would mean either duplicating
+that or inventing a shared service the rule does not describe either. Write
+*new* contexts with `use-cases/`.
 
-### Layer-by-Layer Auth
+## Use case pattern — one per feature
 
-| Layer | Mechanism |
-|-------|-----------|
-| Entry | AuthGuard via `IAuthMiddlewarePort` |
-| Presentation | Reads identity from RequestContext |
-| Application | Option A: Re-validate via `IAuthMiddlewarePort`. Option B: Own security contract |
-| Domain | Never — pure business logic |
-
-### Per-Layer Auth Awareness
-
-| Layer | Sees Auth? | Mechanism |
-|-------|-----------|-----------|
-| **Domain** | Never | Pure business logic. No auth types, no identity awareness. |
-| **Application** | Via RequestContext | Reads userId/tenantId/roles from context for ownership checks. Never imports auth package. |
-| **Presentation** | Guards | `@UseGuards(AuthGuard)`, `@Public()`, `@Roles('admin')` |
-| **Infrastructure** | Full | Token parsing, key validation, identity resolution |
-
-### Per-Context Auth Strategy
-
-| Context | Recommended Credential |
-|---------|----------------------|
-| Auth (login/register) | `@Public()` — unauthenticated |
-| User | JWT |
-| Product Catalog | JWT (admin writes), API Key (public reads) |
-| Shipping | JWT |
-| Order / Payment | JWT |
-| Worker / Scheduler | API Key |
-| CI/CD | API Key |
-
-## Use Case Pattern — One per Feature
-
-Each discrete feature gets one self-contained use case file:
+Each discrete feature gets one self-contained file:
 
 ```
 application/use-cases/
-  register-user.use-case.ts     # RegisterUserUseCase
-  login.use-case.ts             # LoginUseCase
-  get-profile.use-case.ts       # GetProfileUseCase
+  create-catalog.use-case.ts
+  archive-catalog.use-case.ts
+  get-profile.use-case.ts
 ```
 
-Each use case: **validate input → construct VOs → call domain → persist → publish events → return**
+Each one: **validate input → construct VOs → call domain → persist → enqueue
+events → return.**
 
 ```ts
-// use-cases/register-user.use-case.ts
 export class RegisterUserUseCase {
   constructor(
     @Inject(USER_REPOSITORY) private readonly userRepo: IUserRepository,
-    /* ... */
   ) {}
 
   async execute(dto: RegisterDto): Promise<AuthTokens> {
-    const email = new Email(dto.email);                // 1. VO validation
-    const existing = await this.userRepo.findByEmail(email);
-    if (existing) throw new DomainError('...');        // 2. Domain rule
-    const user = User.create(email, password);          // 3. Aggregate
-    await this.userRepo.save(user);                     // 4. Persist (via port)
-    await this.eventBus.publishEvents(user.events);     // 5. Events
-    return tokens;                                      // 6. Return
+    const email = new Email(dto.email);                 // 1. VO validation
+    if (await this.userRepo.findByEmail(email))
+      throw new ValidationError('...');                 // 2. domain rule
+    const user = User.create(email, password);          // 3. aggregate
+    await this.outbox.transaction(async (tx) => {       // 4. persist + enqueue
+      await this.userRepo.save(user, tx);               //    in ONE transaction
+      await this.outbox.write(user.events, tx);
+      user.clearEvents();
+    });
+    return tokens;                                      // 5. return
   }
 }
 ```
 
-## CQRS Decision — Adopt After Gate Create for High Write/Read Features
+A repository must **not** clear an aggregate's events. It did once, and every
+`UserCreated` was dropped before anything could publish it: registration
+returned 201 and no profile was ever created. Only a real database exposed it —
+the test that should have caught it stubbed the repository at fault.
 
-CQRS is not default. Decision rule after gate enables a feature:
+## Cross-layer mapping
 
-```
-Feature enabled via @Gate() gate rerun
-  → Monitor: does it have high write AND high read volume?
-    → Yes: adopt CQRS — split Command (write) and Query (read) use cases
-             with separate models/ports/optimized repositories
-    → No:  keep simple — single use case handles both write and read
-```
+**Application → Presentation.** A use case returns a domain or application
+object, never a DTO. The controller maps to the DTO.
 
-**When to adopt CQRS in a context:**
-- Write path and read path have different shapes (e.g. Order writes complex aggregates, reads flat projections)
-- Read queries need performance optimization (denormalized views, caching, separate indexes) that would complicate writes
-- Write operations trigger domain events / outbox that reads should not wait for
+**Presentation → Application.** The controller passes the DTO through. It never
+constructs domain value objects; the use case maps DTO → VO.
 
-**How to structure CQRS (only when decision is YES):**
+**Application → Infrastructure.** The application depends on the domain port
+(`IUserRepository`); the module wires the TypeORM implementation via
+`useClass`. The application never imports infrastructure.
 
-```
-application/
-  commands/                     # Write side
-    place-order.command.ts
-    cancel-order.command.ts
-  queries/                      # Read side
-    get-order.query.ts
-    list-user-orders.query.ts
-  handlers/                     # Separate dispatchers
-    command-handler.ts
-    query-handler.ts
-```
+## Persistence — per-context pools and schemas
 
-Both commands and queries still go through `@Gate()` — gating is orthogonal to CQRS.
+**[built]** Four named TypeORM data sources, one per context, each with its own
+connection pool and its own PostgreSQL schema (`auth`, `user`, `catalog`,
+`product`). `synchronize` and `migrationsRun` are off on all four.
 
-## Handling Center (Command/Query Dispatcher)
-
-Central entry for all application operations. Decouples controller from use case directly:
+Connection settings resolve in two steps, in
+`shared/adapters/config/context-db.config.ts`:
 
 ```
-application/handlers/
-  command-handler.ts              # dispatch({ type, payload }) → routes to use case
-  query-handler.ts                # dispatch({ type, params }) → routes to query
-  index.ts                        # Single exported dispatch()
+DB_<CONTEXT>_<SETTING>   ->   DB_<SETTING>   ->   built-in default
 ```
 
-## Layer Mappings — Cross-Layer Communication
+Unset, every context lands on the same server and database in its own schema.
+Setting `DB_CATALOG_HOST` and `DB_CATALOG_DATABASE` moves catalog to a database
+of its own with **no code change** — that is the entire database-per-context
+migration path, and it has been exercised end to end.
 
-### Application → Presentation (output)
+**Migration histories are per context.** Each context owns a `migrations` table
+inside its own schema, so `revert` on catalog cannot touch auth. Migrations
+live in `modules/<context>/adapters/outbound/persistence/migrations/`.
+
+Two traps, both hit for real:
+
+- **Declare indexes on the entity.** A hand-written `CREATE INDEX` in a
+  migration that the entity does not declare shows up as drift, and the next
+  generated migration drops it.
+- **The schema must exist before the CLI runs.** TypeORM writes its
+  `migrations` table into the context schema *before* running the migration
+  that creates that schema. `scripts/migrate.mjs` runs `src/ensure-schema.ts`
+  first for this reason.
+
+## Authentication — how it actually works
+
+**[built]** Passport JWT. There is no global auth guard.
 
 ```
-Use Case returns domain object → Handler/Controller maps to DTO → JSON response
+POST /api/v1/auth/login  ->  { accessToken, refreshToken }
+
+Protected routes carry @UseGuards(JwtAuthGuard) — per controller or per method.
+  JwtAuthGuard extends AuthGuard('jwt')
+    -> JwtStrategy validates the bearer token
+    -> handleRequest writes { userId, roles, authMethod: 'jwt' }
+       into RequestContext (AsyncLocalStorage)
+
+Everything past that point reads identity from RequestContext.
 ```
 
-Use case never returns a DTO. Returns domain/application objects. Controller maps to DTO.
+Identity is written in the **guard**, not the middleware: the middleware runs
+before guards and cannot tell an authenticated route from a public one, and
+parsing tokens there would mean two components verify JWTs.
 
-### Application → Domain (input)
+Refresh tokens are **rotated and hashed**. A `user_sessions` row stores the
+SHA-256 of the token, never the token. Presenting a revoked refresh token
+revokes every session for that user — reuse is treated as compromise. Each
+token carries a `sid`, without which two refreshes in the same second produce
+byte-identical tokens (JWT `iat` has one-second granularity).
+
+| Layer | Sees auth? | Mechanism |
+|---|---|---|
+| **Domain** | Never | Pure business logic. No auth types. |
+| **Application** | Via `RequestContext` | Reads `userId`/`roles` for ownership. Never imports auth. |
+| **Presentation** | Guards | `@UseGuards(JwtAuthGuard)`, `@Roles(ROLE_ADMIN)` |
+| **Infrastructure** | Full | Token parsing, session hashing, identity resolution |
+
+Other contexts **never** import auth domain types. They read `RequestIdentity`
+from `shared/adapters/request-context/request-context.types.ts`, which is the
+single definition of that shape.
+
+### Guards, and where they are registered
+
+| Guard | Scope | Notes |
+|---|---|---|
+| `ThrottlerGuard` | global (`APP_GUARD`) | rate limiting |
+| `GateGuard` | global (`APP_GUARD`) | `@Gate()` + `API_LOCKED`; `@SkipGate()` opts out |
+| `AttributesGuard` | global (`APP_GUARD`) | ABAC; inert unless `FEATURE_ABAC=true` |
+| `JwtAuthGuard` | **per controller/method** | not global |
+| `RolesGuard` | **per method** | inert unless `FEATURE_RBAC=true` |
+
+**`@Public()` currently enforces nothing.** `JwtAuthGuard` honours it, but
+because that guard is applied per controller rather than globally, the routes
+marked `@Public()` have no guard on them in the first place. The decorator
+records intent and would start mattering the moment `JwtAuthGuard` becomes an
+`APP_GUARD`. Do not read it as a security control today.
+
+**`FEATURE_RBAC` is not optional.** With it off, all eleven `@Roles(ROLE_ADMIN)`
+endpoints accept any authenticated caller. Turn it on — and create an admin
+with `pnpm seed:admin` first, or it locks those endpoints against everyone.
+
+**[plan]** API keys. `RequestIdentity.authMethod` reserves `'api_key'` and
+nothing issues or validates one. The per-context credential table below is a
+plan for when workers and schedulers exist; today every context is JWT.
+
+| Context | Credential | Status |
+|---|---|---|
+| Auth (login/register) | none | **[built]** |
+| User, Catalog, Product | JWT | **[built]** |
+| Worker / Scheduler / CI | API key | **[plan]** — no such component exists |
+
+A dead `AUTH_MIDDLEWARE_PORT` with `validateToken`/`validateApiKey` was
+described here for months and implemented by nothing. It was deleted in
+spec-004 rather than built, because building it would have designed an API-key
+mechanism with no caller to shape it — which is how it came to be dead.
+
+## Domain events and the outbox
+
+**[built]** Two delivery paths, and the difference matters.
+
+**Within a context**, `@nestjs/cqrs`'s `EventBus` is available. It is
+fire-and-forget: `publish` returns `void`, handlers run detached, and their
+errors vanish into an `UnhandledExceptionBus` nothing subscribes to.
+
+**Between contexts**, use the **transactional outbox**. Under per-context pools
+there is no cross-context transaction, so this is not an upgrade over a better
+option — it is the only way two contexts can agree on anything.
 
 ```
-Controller receives DTO → Use Case maps DTO → VO (constructs Email, Password, etc.) → Domain aggregate
+use case
+  └─ outbox.transaction(tx):
+       repo.save(aggregate, tx)        ─┐ one transaction:
+       outbox.write(events, tx)        ─┘ both or neither
+
+OutboxPoller (every context that publishes)
+  └─ SELECT ... FOR UPDATE SKIP LOCKED, exponential backoff on attempts
+       └─ IntegrationEventDispatcher.dispatch(event)   ← awaited, and it throws
+            └─ handler in the consuming context (idempotent — at-least-once)
 ```
 
-Presentation never constructs domain VOs. Use case handles DTO → VO mapping.
+`outbox.write` **requires** the transaction manager rather than accepting an
+optional one: an enqueue outside the aggregate's transaction is the exact bug
+the outbox exists to prevent, so it is not expressible.
 
-### Domain → Infrastructure (repository boundary)
+The dispatcher is not the `EventBus`, for the reason above — through the bus,
+every message would be marked delivered whether or not its handler succeeded,
+and `attempts`, the backoff and the give-up threshold would never fire once.
+
+Consequences to keep in mind:
+
+- **Consumers must be idempotent.** Delivery is at-least-once. Check-then-write.
+- **Cross-context reads are eventually consistent.** `GET /me` immediately
+  after registering can 404 until the poller runs.
+- **Only `auth` and `catalog` have an outbox table.** `user` and `product`
+  publish nothing. A context that starts publishing without one fails loudly
+  (`relation does not exist`), which is the intent — add the migration then.
+- Event names come from `constructor.name` and are keys into
+  `event-bus/integration-events/registry.ts`. **Renaming an event class
+  orphans every message already in the outbox**, undispatched forever, while
+  writes keep succeeding.
+
+`GET /health` reports outbox depth and answers `status: "degraded"` with HTTP
+**200** when messages are stuck. That is deliberate: `/health` is the liveness
+probe, and a restart cannot unstick an outbox — the messages are in the
+database, not in memory. Failing liveness would only flap.
+
+## Feature gates
+
+**[built]** `@Gate('featureName')` on a controller method; the global
+`GateGuard` checks `FeatureGateService`, which reads `app.features.*` from env
+(`FEATURE_USER_PROFILE`, `FEATURE_PRODUCT_CATALOG`, `FEATURE_RBAC`,
+`FEATURE_ABAC`). A disabled feature returns **503** with
+`{ code: "FEATURE_DISABLED", feature }`.
+
+`API_LOCKED=true` locks the whole API with **503** and
+`{ code: "API_LOCKED" }` — a distinct code, because an orchestrator seeing
+`FEATURE_DISABLED` during a deliberate maintenance window learns the wrong
+thing. `@SkipGate()` exempts a route; `/health` carries it, so maintenance mode
+does not get the process restarted.
+
+**[plan]** `FEATURE_SHIPPING` is reserved. There is no shipping code.
+
+## Errors
+
+**[built]** — this is the complete list:
 
 ```
-Application depends on IUserRepository (domain port) ← implements → UserRepository (TypeORM)
+DomainError (pure TS, extends Error, sets name from the constructor)
+  NotFoundError        -> 404
+  ValidationError      -> 400
+  UnauthorizedError    -> 401
 ```
 
-Application never imports infrastructure. Module wires port → adapter via `useClass`.
+`GlobalExceptionFilter` maps by `name`, passes `HttpException` through
+(preserving extra body fields such as `code`), and turns anything else into
+500.
 
-## Key Patterns
+**[plan]** — described here for years, **none of it exists**. Do not import
+these; do not assume a caller can catch them:
 
-### Port Injection
-- String tokens: `USER_REPOSITORY`, `AUTH_SERVICE`
-- Controllers: `@Inject(AUTH_SERVICE) private readonly authService: IAuthService`
-- Services: `@Inject(USER_REPOSITORY) private readonly userRepository: IUserRepository`
+- `ConflictError` (409)
+- `ApplicationError` → `ResourceNotFoundError`, `OperationForbiddenError`,
+  `InvalidInputError`
+- `InfrastructureError` → `DatabaseError`, `ExternalServiceError`,
+  `ConfigurationError`
 
-### Config Namespace
-Config is registered under the `app` namespace via `registerAs('app', ...)`. Access values as:
+Today a use case throws a `DomainError` subclass or a Nest `HttpException`, and
+adapter failures bubble to the filter as 500. If you need one of the above,
+build it and move the marker.
+
+## Config
+
+Registered under the `app` namespace via `registerAs('app', ...)`:
+
 ```ts
 configService.get<string>('app.jwt.secret')
-configService.get<number>('app.database.port')
+configService.get<boolean>('app.features.rbac')
 ```
-See `backend/src/shared/adapters/config/app.config.ts` for all keys.
 
-### Domain Errors
+All keys are in `backend/src/shared/adapters/config/app.config.ts`; env
+variables are validated with Joi at boot. Per-context database settings come
+from `context-db.config.ts` (see Persistence).
+
+## Routing
+
+**[built]** Global prefix `api/v1` from `API_PREFIX`, with `health` excluded so
+probes survive a version bump.
+
+| Route | Auth | Gate |
+|---|---|---|
+| `GET /health` | none | `@SkipGate()` |
+| `POST /api/v1/auth/{register,login,refresh,logout}` | none | — |
+| `POST /api/v1/auth/change-password`, `GET /api/v1/auth/profile` | JWT | — |
+| `POST /api/v1/auth/users/:id/role` | JWT + admin | — |
+| `GET /api/v1/me`, `PATCH /api/v1/me/profile` | JWT | `userProfile` |
+| `/api/v1/catalogs/*` | JWT (writes admin) | `productCatalog` |
+| `/api/v1/products/*` | JWT (writes admin) | `productCatalog` |
+
+## Port injection
+
+String tokens, injected by interface:
+
 ```ts
-DomainError (pure TS)         // base — extends Error, sets name from constructor
-  NotFoundError               // -> HTTP 404 — entity not found
-  ValidationError             // -> HTTP 400 — VO construction failed
-  UnauthorizedError           // -> HTTP 401 — not allowed
-  ConflictError               // -> HTTP 409 — duplicate/conflict
+@Inject(AUTH_SERVICE)   private readonly authService: IAuthService
+@Inject(USER_REPOSITORY) private readonly userRepository: IUserRepository
 ```
-Thrown by entities/VOs/domain services. Mapped by GlobalExceptionFilter via name.
 
-### Application Errors
-```ts
-ApplicationError (pure TS)    // base — orchestration failures
-  ResourceNotFoundError       // -> HTTP 404
-  OperationForbiddenError     // -> HTTP 403
-  InvalidInputError           // -> HTTP 400
-```
-Thrown by use cases for application-level failures not covered by domain rules.
+## Structure that is documented, not built
 
-### Infrastructure Errors
-```ts
-InfrastructureError           // base — technical failures
-  DatabaseError               // -> HTTP 500
-  ExternalServiceError        // -> HTTP 500
-  ConfigurationError          // -> HTTP 500
-```
-Thrown by adapters. Never caught in application/domain — let bubble to filter.
+Named here so nobody implements from a description and finds it missing.
 
-### Exception Layer Boundary
-Each layer throws its own exception types. GlobalExceptionFilter maps all to HTTP:
-- DomainError -> map by name (400/401/404/409/500)
-- ApplicationError -> map by name (400/403/404/500)
-- InfrastructureError -> 500
-- HttpException -> pass through
-- GateException -> 503
+**[plan] Handling centre.** A `application/handlers/command-handler.ts` +
+`query-handler.ts` dispatcher decoupling controllers from use cases. **No
+context has one.** Controllers call use cases directly. `handlers/` in `user`
+and `product` holds integration-event consumers, which is a different thing.
 
-### Domain Events
-- Extend `DomainEvent` (sets `occurredOn` + `eventName` in constructor)
-- Collected on aggregate, published via `EventBusService.publishEvents()`, cleared after `save()`
+**[plan] CQRS command/query split.** No context separates `commands/` from
+`queries/`. CQRS is not a default and is not adopted anywhere. The rule for
+when it would be worth adopting:
 
-### Feature Gates
-- `@Gate('feature-name')` decorator on controller methods
-- Global `GateGuard` checks maintenance mode (`API_LOCKED=true`)
-- `FeatureGateService` reads from env config: `FEATURE_X=true/false`
-- Disabled features return 503 with `code: "FEATURE_DISABLED"`
+- the write and read paths have genuinely different shapes; **and**
+- reads need optimisation (projections, caching, separate indexes) that would
+  complicate writes; **and**
+- writes trigger events that reads must not wait on.
 
-### Auth (Bounded Context + Middleware Provider)
-- Auth is a BC (`backend/modules/auth/`) with User domain, register/login use cases, JWT/API Key adapters
-- **All requests pass through AuthGuard first** — validates JWT Bearer or X-API-Key
-- Identity extracted to `RequestContext` — other BCs never import auth domain types
-- `@Public()` skips auth, `@Roles('admin')` gates by role
+Gating is orthogonal to this — commands and queries both go through `@Gate()`.
 
 ## Environment
 
 ```bash
-cp .env.example .env
-```
-See `.env.example` for all variables. No `.env` is committed — each dev creates their own.
-
-## Session Pipeline — Memory → Audit → Checkpoint
-
-After user begins, each session runs this pipeline at session start, per request, and on explicit user request.
-
-```
-User begins
-  │
-  ▼
-┌─────────────┐
-│  MEMORY     │  ◄─ Load MEMORY.md index → recall relevant memories
-│  old / new  │  ◄─ Write new memories, update changed ones
-│  / update   │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  AUDIT      │  ◄─ Full feature audit: scan src/ vs CLAUDE.md vs memory
-│  full /     │  ◄─ Update audit after code changes
-│  update /   │  ◄─ Request audit on user command
-│  request    │
-└──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│  CHECKPOINT │  ◄─ Per session: full snapshot at start
-│  session /  │  ◄─ Per request: change log after each tool turn
-│  request /  │  ◄─ On user /checkpoint: deep diff vs session snapshot
-│  per-req    │
-└─────────────┘
-       │
-       ▼
-    Proceed to feature work
+cd backend && cp .env.example .env
 ```
 
-### 1. Memory
+`backend/.env.example` lists every variable with notes. No `.env` is committed.
 
-Persistent file-based memory at `.claude/memory/` (project-local, not global user profile). Each memory = one file with frontmatter:
+## Where the records live
 
-```markdown
----
-name: <kebab-slug>
-description: <one-line summary>
-metadata:
-  type: user | feedback | project | reference
----
+| What | Where |
+|---|---|
+| Findings from the 2026-08-17 audit, with status | `docs/audit/audit-2026-08-17.md` |
+| Decisions taken on those findings | `docs/decision.md` |
+| Remediation specs (001–004) | `docs/specs/` |
+| Gate artifacts, per context | `docs/gates/<context>/` |
+| Session memory index | `.claude/memory/MEMORY.md` |
+| Checkpoints | `.claude/memory/checkpoints/` |
 
-<the fact>
-```
+### Gate artifacts
 
-| Operation | When | What |
-|-----------|------|------|
-| **Old memory** | Session start | Load MEMORY.md index, recall relevant memories via description |
-| **New memory** | New fact discovered | Write to memory/ as .md file |
-| **Update memory** | Fact changed | Re-read existing file, update content, preserve name |
+A gate run is recorded at `docs/gates/<context>/gate-NNN--<name>.md`, in two
+parts: **Decision**, written before the run (context, criteria, PASS/FAIL/
+RERUN), and **Evaluation Result**, written after (outcome, evidence, issues
+found, next step).
 
-Source of truth index: `.claude/memory/MEMORY.md` — one link per memory file.
+The evidence section is the point of the artifact, and it has one rule:
 
-### 2. Audit
+> **Do not write "Issues Found: None" for something that has not been run.**
 
-Run after memory is loaded. Evaluates current project state against stored memory.
-
-| Operation | When | What |
-|-----------|------|------|
-| **Full feature audit** | Session start | Scan src/ structure, compare against CLAUDE.md and memory. Detect drift, missing files, stale paths |
-| **Update feature audit** | After code change | Re-scan changed directories, verify new code matches architecture pattern |
-| **Request feature audit** | On user request | Targeted audit of specific context/feature the user names |
-
-Each audit outputs: what matches, what drifts, action needed (create/update/delete).
-
-### 3. Checkpoint
-
-Three checkpoints exist. A checkpoint records current state: file tree, key file hashes, architecture conformance.
-
-| Checkpoint | Trigger | Records |
-|------------|---------|---------|
-| **Per session** | Session start | Full project snapshot — file tree, CLAUDE.md hash, memory index hash |
-| **Per request** | After each tool-use turn | Change log: files read/written/edited, decisions made, gates created/passed |
-| **If user requests** | On `/checkpoint` or explicit ask | Deep snapshot + diff against per-session checkpoint |
-
-Checkpoints stored in `.claude/memory/checkpoints/` — auto-clean after 30 days.
-
-## Gate Artifact — Save per Gate Run
-
-Each gate run produces an artifact saved in markdown format. Artifacts support decision-making and evaluate results.
-
-### Artifact Location
-
-```
-docs/gates/
-  <context>/
-    <feature-name>/
-      gate-001--<name>.md      # First gate run
-      gate-002--<name>.md      # Second gate run (rerun after test)
-      gate-003--<name>.md      # Final gate (enable)
-```
-
-### Artifact Template (saved as .md)
-
-Every markdown artifact is split into two sections.
-
-**Section 1 — Decision (written BEFORE gate run):**
-
-```markdown
-# Gate: user-profile
-
-## Gate Run: 001
-**Date:** 2026-07-05
-**Feature:** user-profile
-**Gate Type:** [create | rerun | final-enable]
-
-## Decision Context
-- **Feature:** User profile management (GET /me, PATCH /me)
-- **Status:** Implementation complete, tests needed
-- **Dependencies:** Auth context, RequestContext, TenantContext
-
-## Criteria
-- [x] Use case implemented
-- [x] Tests pass (pipeline/unit)
-- [ ] Integration test passes
-- [x] Review passed
-
-## Decision
-[PASS | FAIL | RERUN]
-**Reason:** <why pass/fail/rerun>
-```
-
-**Section 2 — Evaluation (written AFTER gate result):**
-
-```markdown
-## Evaluation Result
-
-### Outcome
-**Gate decision:** PASS
-**Action:** Rerun with integration tests
-
-### Evidence
-- Unit tests: 4/4 passed
-- Integration tests: skipped (no DB)
-- Lint: clean
-
-### Issues Found
-- Integration test missing for UserRepository.findById
-
-### Next Step
-Enable integration test, then gate rerun (gate-002)
-```
-
-### Complete Example
-
-```markdown
-# Gate: user-profile
-
-## Gate Run: 001
-**Date:** 2026-07-05
-**Feature:** user-profile
-**Gate Type:** create
-
-## Decision Context
-- **Feature:** User profile management (GET /me, PATCH /me)
-- **Status:** Implemented + unit tests
-- **Dependencies:** Auth context, RequestContext
-
-## Criteria
-- [x] Use case implemented
-- [x] Unit tests pass
-- [ ] Integration tests pass
-- [x] No lint errors
-
-## Decision
-RERUN
-**Reason:** Integration tests need DB connection
-
-## Evaluation Result
-
-### Outcome
-**Gate decision:** RERUN
-**Action:** Add docker-compose up before integration tests
-
-### Evidence
-- Unit tests: 4/4 passed
-- Lint: clean
-
-### Issues Found
-- Docker not running → integration tests skipped
-- Missing test DB config in CI
-
-### Next Step
-Set up test DB, then gate-002 rerun
-```
-
-## Workflow Pipeline — Automated Execution
-
-Harness-driven pipeline for feature implementation. Uses multi-agent orchestration (Workflow tool) with defined cost budget + expected result.
-
-### Pipeline Lifecycle
-
-```
-User requests feature
-  │
-  ▼
-┌────────────────────────────────────────────┐
-│ 1. PROPOSE                                 │
-│    - Define pipeline phases                │
-│    - Set cost budget (token target)        │
-│    - Declare expected result               │
-│    - Present to user                       │
-└──────────┬─────────────────────────────────┘
-           │ user confirms
-           ▼
-┌────────────────────────────────────────────┐
-│ 2. EXECUTE                                 │
-│    - Run Workflow script                   │
-│    - budget.total enforces cap             │
-│    - Each agent() call consumes budget     │
-│    - Phase results stream in real-time     │
-└──────────┬─────────────────────────────────┘
-           │
-           ▼
-  ┌────────────────┐     NO (over + incomplete)
-  │ Budget OK?     │─────────────────────────────┐
-  │ Result met?    │                             │
-  └────────┬───────┘                             │
-           │ YES                                 │
-           ▼                                     ▼
-  ┌──────────────────┐               ┌─────────────────────────┐
-  │ 3. REPORT        │               │ 4. OVERSIGHT PAUSE      │
-  │    - Summary     │               │    - Report spent/cost   │
-  │    - Evidence    │               │    - Show partial result │
-  │    - Next step   │               │    - Ask user:           │
-  └──────────────────┘               │      Continue? +top-up   │
-                                     │      Abort?              │
-                                     └─────────────────────────┘
-                                              │ user decision
-                                              │
-                                    ┌─────────┴─────────┐
-                                    │ continue (+budget) │
-                                    │ abort (rollback)   │
-                                    └───────────────────┘
-```
-
-### 1. Proposal Phase
-
-Before any execution, present to user:
-
-```yaml
-pipeline:
-  feature: <feature-name>
-  phases:
-    - review      # Review spec + existing code
-    - plan        # Create implementation plan, gate-001 artifact
-    - implement   # Write code (use cases, adapters, tests)
-    - test        # Run build + tests
-    - gate        # Gate rerun or final-enable, gate-002/003 artifact
-  cost_budget:
-    tokens: <N>k     # Token target for entire pipeline
-    hard_cap: true    # Enforced — cannot exceed without user approval
-  expected_result:
-    - Build passes
-    - All tests pass
-    - Gate artifact saved at docs/gates/<context>/<feature>/
-    - <specific success criteria>
-```
-
-User confirms → execute. User rejects → revise or abort.
-
-### 2. Execution Phase — Workflow Script
-
-Pipeline runs as a Workflow script. Each phase is a `phase()` call, agents implement the work.
-
-```javascript
-export const meta = {
-  name: 'implement-feature',
-  description: 'Implement a feature through spec→plan→code→test→gate',
-  phases: [
-    { title: 'Review' },
-    { title: 'Plan' },
-    { title: 'Implement' },
-    { title: 'Test' },
-    { title: 'Gate' },
-  ],
-}
-
-phase('Review')
-const codebase = await agent('Scan codebase: existing patterns, related files, spec doc', {...})
-
-phase('Plan')
-const plan = await agent('Create implementation plan + gate-001 artifact', {...})
-
-phase('Implement')
-const code = await agent('Implement code: use cases, adapters, tests, DTOs', {...})
-
-phase('Test')
-const results = await agent('Run build + tests, fix failures', {...})
-
-phase('Gate')
-const gate = await agent('Evaluate results, write gate-002/003 artifact', {...})
-```
-
-### 3. Cost Budget & Overspend Protocol
-
-| Concept | Rule |
-|---------|------|
-| **budget.total** | Set in proposal — token target for the pipeline |
-| **budget.spent()** | Accumulates across all agents in the workflow |
-| **budget.remaining()** | `max(0, total - spent())` — `Infinity` if no target |
-| **Hard cap** | Once `spent()` reaches `total`, `agent()` calls throw |
-
-When budget exceeded AND expected result not met:
-
-1. Pipeline pauses automatically
-2. Report to user: `spent / total tokens, result: <partial>, missing: <gaps>`
-3. Ask: continue with top-up budget? abort?
-4. User decision:
-   - **Continue**: define additional budget, resume pipeline
-   - **Abort**: rollback partial work, save checkpoint for later
-
-### 4. Pipeline Templates
-
-#### Feature Implementation (standard)
-
-```
-phases: review → plan → implement → test → gate
-budget: 150k-300k tokens
-```
-
-#### Bug Fix (lightweight)
-
-```
-phases: diagnose → fix → verify
-budget: 50k-100k tokens
-```
-
-#### Refactor / Architecture Change
-
-```
-phases: audit → design → migrate → verify → gate
-budget: 200k-500k tokens
-```
-
-### 5. Error Handling
-
-- **Agent failure**: agent() returns `null` (user skipped or API error) — filter with `.filter(Boolean)`
-- **Phase failure**: pipeline stage throws → item drops to `null`, remaining stages for that item skipped
-- **Budget exceeded**: `agent()` throws → Workflow catches, pauses, reports to user
-- **Recovery**: resume from failed phase using stored gate artifact + checkpoint
+Three gates recorded exactly that for features with no test and no live
+database behind them. If a criterion was not verified, say which one and why
+— an unverified criterion recorded honestly costs nothing; recorded as a pass
+it removes the reason to ever check.

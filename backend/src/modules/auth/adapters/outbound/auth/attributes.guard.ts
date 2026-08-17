@@ -1,9 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { RequestIdentity } from '../../../application/ports/auth-middleware.port';
-
-export const ATTRIBUTES_KEY = 'attributes';
+import { RequestIdentity } from '../../../../../shared/adapters/request-context/request-context.types';
+import { ATTRIBUTES_KEY } from './attributes.decorator';
 
 @Injectable()
 export class AttributesGuard implements CanActivate {

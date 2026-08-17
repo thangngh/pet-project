@@ -1,4 +1,5 @@
 import { AttributesGuard } from './attributes.guard';
+import { Attributes } from './attributes.decorator';
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
@@ -57,5 +58,40 @@ describe('AttributesGuard', () => {
     (configService.get as jest.Mock).mockReturnValue(true);
     jest.spyOn(reflector, 'get').mockReturnValue({ region: 'vn' });
     expect(guard.canActivate(mockContext({}))).toBe(false);
+  });
+
+  // Every test above stubs `reflector.get`, so none of them touches the
+  // metadata key. The guard used to declare its own `ATTRIBUTES_KEY =
+  // 'attributes'` next to the decorator's — equal by luck, and a rename on
+  // either side would have made the guard read metadata nobody writes: it
+  // would then pass every request, silently, with all five tests still green.
+  // This one reads the real decorator's metadata through a real Reflector.
+  it('reads the metadata the decorator actually writes', () => {
+    (configService.get as jest.Mock).mockReturnValue(true);
+
+    class Controller {
+      @Attributes({ region: 'vn' })
+      handler() {}
+    }
+    const handler = Controller.prototype.handler;
+
+    const context = (attrs: Record<string, any>): ExecutionContext =>
+      ({
+        switchToHttp: () => ({
+          getRequest: () => ({
+            identity: {
+              userId: 'u1',
+              roles: [],
+              authMethod: 'jwt',
+              attributes: attrs,
+            },
+          }),
+        }),
+        getHandler: () => handler,
+        getClass: () => Controller,
+      }) as unknown as ExecutionContext;
+
+    expect(guard.canActivate(context({ region: 'vn' }))).toBe(true);
+    expect(guard.canActivate(context({ region: 'us' }))).toBe(false);
   });
 });
