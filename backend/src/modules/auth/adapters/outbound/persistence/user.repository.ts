@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { IUserRepository } from '../../../domain/ports/user-repository.port';
 import { User } from '../../../domain/entities/user.entity';
 import { UserId } from '../../../domain/value-objects/user-id.value-object';
@@ -11,7 +11,7 @@ import { TypeOrmUserEntity } from './typeorm-user.entity';
 @Injectable()
 export class UserRepository implements IUserRepository {
   constructor(
-    @InjectRepository(TypeOrmUserEntity)
+    @InjectRepository(TypeOrmUserEntity, 'auth')
     private readonly repo: Repository<TypeOrmUserEntity>,
   ) {}
 
@@ -21,7 +21,9 @@ export class UserRepository implements IUserRepository {
   }
 
   async findByEmail(email: Email): Promise<User | null> {
-    const entity = await this.repo.findOne({ where: { email: email.toString() } });
+    const entity = await this.repo.findOne({
+      where: { email: email.toString() },
+    });
     return entity ? this.toDomain(entity) : null;
   }
 
@@ -30,10 +32,17 @@ export class UserRepository implements IUserRepository {
     return entities.map((e) => this.toDomain(e));
   }
 
-  async save(user: User): Promise<void> {
-    const entity = this.toPersistence(user);
-    await this.repo.save(entity);
-    user.clearEvents();
+  async save(user: User, tx?: unknown): Promise<void> {
+    const repo = tx
+      ? (tx as EntityManager).getRepository(TypeOrmUserEntity)
+      : this.repo;
+
+    await repo.save(this.toPersistence(user));
+
+    // Deliberately does NOT clear the aggregate's events. The use case
+    // publishes them after this returns and clears them itself; clearing here
+    // emptied the array first, so every UserCreated event was silently
+    // dropped and no profile was ever created.
   }
 
   async delete(id: UserId): Promise<void> {

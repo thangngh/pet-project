@@ -1,10 +1,11 @@
-import { Entity, Column, PrimaryColumn, VersionColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, VersionColumn, Index } from 'typeorm';
 
 @Entity('products')
 export class TypeOrmProduct {
   @PrimaryColumn()
   id: string;
 
+  @Index('IDX_products_catalogId')
   @Column()
   catalogId: string;
 
@@ -14,6 +15,7 @@ export class TypeOrmProduct {
   @Column({ nullable: true })
   description?: string;
 
+  @Index('IDX_products_status')
   @Column({ default: 'draft' })
   status: string;
 

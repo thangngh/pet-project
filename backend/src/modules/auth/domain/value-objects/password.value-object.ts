@@ -4,6 +4,14 @@ export class Password {
   private readonly value: string;
   private readonly hashed: boolean;
 
+  /**
+   * `hashed: true` means "this is a stored hash being rehydrated", and skips
+   * the strength rule because a bcrypt digest cannot satisfy it.
+   *
+   * It is not a way to accept a password without checking it. Both callers
+   * used to hash first and then pass `true`, so the strength rule never ran
+   * for anyone; they now construct from the plaintext first and hash after.
+   */
   constructor(value: string, hashed = false) {
     if (!hashed && !this.isStrongPassword(value)) {
       throw new ValidationError(

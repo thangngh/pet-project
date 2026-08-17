@@ -1,9 +1,8 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
-import { RequestIdentity } from '../../../application/ports/auth-middleware.port';
-
-export const ATTRIBUTES_KEY = 'attributes';
+import { RequestIdentity } from '../../../../../shared/adapters/request-context/request-context.types';
+import { ATTRIBUTES_KEY } from './attributes.decorator';
 
 @Injectable()
 export class AttributesGuard implements CanActivate {
@@ -18,7 +17,10 @@ export class AttributesGuard implements CanActivate {
     }
 
     const required =
-      this.reflector.get<Record<string, any>>(ATTRIBUTES_KEY, context.getHandler()) || {};
+      this.reflector.get<Record<string, any>>(
+        ATTRIBUTES_KEY,
+        context.getHandler(),
+      ) || {};
 
     if (Object.keys(required).length === 0) return true;
 

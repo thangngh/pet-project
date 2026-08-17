@@ -20,8 +20,14 @@ export class Product {
     public version: number = 1,
   ) {}
 
-  publish(): void { this.status = 'published'; this.updatedAt = new Date(); }
-  archive(): void { this.status = 'archived'; this.updatedAt = new Date(); }
+  publish(): void {
+    this.status = 'published';
+    this.updatedAt = new Date();
+  }
+  archive(): void {
+    this.status = 'archived';
+    this.updatedAt = new Date();
+  }
 
   updateDetails(name: string, description?: string): void {
     this.name = name;
@@ -37,14 +43,19 @@ export class Product {
   }
 
   removeAttribute(attrId: string): void {
-    this.attributes = this.attributes.filter(a => a.id !== attrId);
+    this.attributes = this.attributes.filter((a) => a.id !== attrId);
     this.updatedAt = new Date();
   }
 
-  addMedia(id: string, url: string, type: 'image' | 'video', isPrimary?: boolean): ProductMedia {
+  addMedia(
+    id: string,
+    url: string,
+    type: 'image' | 'video',
+    isPrimary?: boolean,
+  ): ProductMedia {
     const media = new ProductMedia(id, url, type, isPrimary ?? false);
     if (isPrimary) {
-      this.media.forEach(m => m.isPrimary = false);
+      this.media.forEach((m) => (m.isPrimary = false));
     }
     this.media.push(media);
     this.updatedAt = new Date();
@@ -52,7 +63,7 @@ export class Product {
   }
 
   removeMedia(mediaId: string): void {
-    this.media = this.media.filter(m => m.id !== mediaId);
+    this.media = this.media.filter((m) => m.id !== mediaId);
     this.updatedAt = new Date();
   }
 }

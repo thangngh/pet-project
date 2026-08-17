@@ -8,6 +8,6 @@ export interface IUserRepository {
   findById(id: UserId): Promise<User | null>;
   findByEmail(email: Email): Promise<User | null>;
   findAll(): Promise<User[]>;
-  save(user: User): Promise<void>;
+  save(user: User, tx?: unknown): Promise<void>;
   delete(id: UserId): Promise<void>;
 }

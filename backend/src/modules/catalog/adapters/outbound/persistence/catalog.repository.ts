@@ -1,18 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, EntityManager } from 'typeorm';
 import { TypeOrmCatalog } from './typeorm-catalog.entity';
 import { Catalog } from '../../../domain/entities/catalog.entity';
-import { ICatalogRepository } from '../../../domain/ports/catalog.repository.port';
+import {
+  ICatalogRepository,
+  TransactionScope,
+} from '../../../domain/ports/catalog.repository.port';
 
 @Injectable()
 export class CatalogRepository implements ICatalogRepository {
   constructor(
-    @InjectRepository(TypeOrmCatalog) private readonly repo: Repository<TypeOrmCatalog>,
+    @InjectRepository(TypeOrmCatalog, 'catalog')
+    private readonly repo: Repository<TypeOrmCatalog>,
   ) {}
 
-  async save(catalog: Catalog): Promise<void> {
-    await this.repo.save(this.toTypeOrm(catalog));
+  async save(catalog: Catalog, tx?: TransactionScope): Promise<void> {
+    const repo = tx
+      ? (tx as EntityManager).getRepository(TypeOrmCatalog)
+      : this.repo;
+
+    await repo.save(this.toTypeOrm(catalog));
   }
 
   async findById(id: string): Promise<Catalog | null> {
@@ -22,12 +30,38 @@ export class CatalogRepository implements ICatalogRepository {
 
   async findAll(): Promise<Catalog[]> {
     const entities = await this.repo.find();
-    return entities.map(e => this.toDomain(e));
+    return entities.map((e) => this.toDomain(e));
   }
 
   async findChildren(parentId: string): Promise<Catalog[]> {
     const entities = await this.repo.find({ where: { parentId } });
-    return entities.map(e => this.toDomain(e));
+    return entities.map((e) => this.toDomain(e));
+  }
+
+  /**
+   * A recursive CTE, so depth costs one query rather than one per level.
+   *
+   * The port says nothing about how this is resolved — walking the tree in the
+   * application layer would work and would issue a query per level, which is
+   * the adapter's business to avoid.
+   */
+  async findDescendants(id: string): Promise<Catalog[]> {
+    const table = this.repo.metadata.tablePath;
+
+    const rows = await this.repo.query(
+      `
+      WITH RECURSIVE descendants AS (
+        SELECT * FROM ${table} WHERE "parentId" = $1
+        UNION ALL
+        SELECT c.* FROM ${table} c
+        INNER JOIN descendants d ON c."parentId" = d.id
+      )
+      SELECT * FROM descendants
+      `,
+      [id],
+    );
+
+    return rows.map((row: TypeOrmCatalog) => this.toDomain(row));
   }
 
   private toTypeOrm(domain: Catalog): TypeOrmCatalog {
@@ -44,8 +78,13 @@ export class CatalogRepository implements ICatalogRepository {
 
   private toDomain(entity: TypeOrmCatalog): Catalog {
     return new Catalog(
-      entity.id, entity.name, entity.parentId,
-      entity.status as any, entity.createdAt, entity.updatedAt, entity.version,
+      entity.id,
+      entity.name,
+      entity.parentId,
+      entity.status as any,
+      entity.createdAt,
+      entity.updatedAt,
+      entity.version,
     );
   }
 }

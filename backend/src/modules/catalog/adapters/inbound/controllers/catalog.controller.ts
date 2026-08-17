@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../../../auth/adapters/outbound/auth/jwt-auth.guard';
 import { RolesGuard } from '../../../../auth/adapters/outbound/auth/roles.guard';
 import { Roles } from '../../../../auth/adapters/outbound/auth/roles.decorator';
@@ -10,8 +19,9 @@ import { GetCatalogTreeUseCase } from '../../../application/use-cases/get-catalo
 import { GetCatalogUseCase } from '../../../application/use-cases/get-catalog.use-case';
 import { CreateCatalogDto } from '../../../application/dto/create-catalog.dto';
 import { UpdateCatalogDto } from '../../../application/dto/update-catalog.dto';
+import { ROLE_ADMIN } from '../../../../auth/domain/constants/role.constants';
 
-@Controller('api/v1/catalogs')
+@Controller('catalogs')
 @UseGuards(JwtAuthGuard)
 export class CatalogController {
   constructor(
@@ -25,7 +35,7 @@ export class CatalogController {
   @Post()
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async create(@Body() dto: CreateCatalogDto) {
     return this.createCatalog.execute(dto.name, dto.parentId);
   }
@@ -33,7 +43,7 @@ export class CatalogController {
   @Patch(':id')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async update(@Param('id') id: string, @Body() dto: UpdateCatalogDto) {
     return this.updateCatalog.execute(id, dto.name);
   }
@@ -41,7 +51,7 @@ export class CatalogController {
   @Delete(':id')
   @Gate('productCatalog')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles(ROLE_ADMIN)
   async archive(@Param('id') id: string) {
     await this.archiveCatalog.execute(id);
     return { message: 'Catalog archived' };

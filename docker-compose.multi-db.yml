@@ -1,0 +1,107 @@
+# Target topology: one database server per bounded context.
+#
+# This is NOT what runs today. Today every context uses the single `postgres`
+# service in docker-compose.yml, each with its own connection pool and its own
+# PostgreSQL schema (see docs/decision.md D4).
+#
+# Moving one context here is a change of environment variables, not of code:
+#
+#   docker compose -f docker-compose.multi-db.yml up -d postgres_catalog
+#   DB_CATALOG_HOST=localhost DB_CATALOG_PORT=5434 DB_CATALOG_DATABASE=ddd_catalog
+#   pnpm migration:generate --context catalog   # first migration in the new database
+#   pnpm migration:run
+#
+# The other three contexts keep pointing at the shared server and are unaffected.
+# `schema` stays set per context either way, so a context looks the same to its
+# own code whether it shares a server or not.
+
+services:
+  postgres_auth:
+    image: postgres:16-alpine
+    container_name: pet-postgres-auth
+    ports:
+      - '${DB_AUTH_PORT:-5432}:5432'
+    environment:
+      POSTGRES_DB: ${DB_AUTH_DATABASE:-ddd_auth}
+      POSTGRES_USER: ${DB_AUTH_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_AUTH_PASSWORD:-postgres}
+    volumes:
+      - pgdata_auth:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DB_AUTH_USERNAME:-postgres} -d ${DB_AUTH_DATABASE:-ddd_auth}',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres_user:
+    image: postgres:16-alpine
+    container_name: pet-postgres-user
+    ports:
+      - '${DB_USER_PORT:-5433}:5432'
+    environment:
+      POSTGRES_DB: ${DB_USER_DATABASE:-ddd_user}
+      POSTGRES_USER: ${DB_USER_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_USER_PASSWORD:-postgres}
+    volumes:
+      - pgdata_user:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DB_USER_USERNAME:-postgres} -d ${DB_USER_DATABASE:-ddd_user}',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres_catalog:
+    image: postgres:16-alpine
+    container_name: pet-postgres-catalog
+    ports:
+      - '${DB_CATALOG_PORT:-5434}:5432'
+    environment:
+      POSTGRES_DB: ${DB_CATALOG_DATABASE:-ddd_catalog}
+      POSTGRES_USER: ${DB_CATALOG_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_CATALOG_PASSWORD:-postgres}
+    volumes:
+      - pgdata_catalog:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DB_CATALOG_USERNAME:-postgres} -d ${DB_CATALOG_DATABASE:-ddd_catalog}',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres_product:
+    image: postgres:16-alpine
+    container_name: pet-postgres-product
+    ports:
+      - '${DB_PRODUCT_PORT:-5435}:5432'
+    environment:
+      POSTGRES_DB: ${DB_PRODUCT_DATABASE:-ddd_product}
+      POSTGRES_USER: ${DB_PRODUCT_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PRODUCT_PASSWORD:-postgres}
+    volumes:
+      - pgdata_product:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${DB_PRODUCT_USERNAME:-postgres} -d ${DB_PRODUCT_DATABASE:-ddd_product}',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata_auth:
+  pgdata_user:
+  pgdata_catalog:
+  pgdata_product:

@@ -1,5 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { CATALOG_REPOSITORY, ICatalogRepository } from '../../domain/ports/catalog.repository.port';
+import {
+  CATALOG_REPOSITORY,
+  ICatalogRepository,
+} from '../../domain/ports/catalog.repository.port';
 import { CatalogDto } from '../dto/catalog.dto';
 
 @Injectable()
@@ -13,7 +16,10 @@ export class GetCatalogTreeUseCase {
     const map = new Map<string, CatalogDto>();
 
     for (const cat of all) {
-      map.set(cat.id, new CatalogDto(cat.id, cat.name, cat.status, cat.parentId, []));
+      map.set(
+        cat.id,
+        new CatalogDto(cat.id, cat.name, cat.status, cat.parentId, []),
+      );
     }
 
     const roots: CatalogDto[] = [];

@@ -107,8 +107,15 @@ Definition of Done:
 [ ] Product starts as draft
 [ ] Product can be published
 [ ] ProductPublished event is written to outbox
-[ ] Tenant isolation tests pass
+[ ] ~~Tenant isolation tests pass~~   <!-- struck 2026-08-17, spec-004 §3 -->
 ```
+
+> **Note, 2026-08-17 (spec-004 §3).** "Tenant isolation tests pass" is struck:
+> multi-tenancy left scope, `shared/adapters/tenant/` was never built, and no
+> entity carries a `tenantId`. A Definition of Done that cannot be met is not a
+> bar, it is a line everyone learns to skip — and this one sat above four items
+> that do matter. `RequestIdentity.attributes` is where a `tenantId` would go
+> if tenancy returns.
 
 ---
 

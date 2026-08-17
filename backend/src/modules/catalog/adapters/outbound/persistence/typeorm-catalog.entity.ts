@@ -1,4 +1,4 @@
-import { Entity, Column, PrimaryColumn, VersionColumn } from 'typeorm';
+import { Entity, Column, PrimaryColumn, VersionColumn, Index } from 'typeorm';
 
 @Entity('catalogs')
 export class TypeOrmCatalog {
@@ -8,6 +8,7 @@ export class TypeOrmCatalog {
   @Column()
   name: string;
 
+  @Index('IDX_catalogs_parentId')
   @Column({ nullable: true })
   parentId?: string;
 

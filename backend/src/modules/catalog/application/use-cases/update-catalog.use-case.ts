@@ -1,5 +1,8 @@
 import { Injectable, Inject } from '@nestjs/common';
-import { CATALOG_REPOSITORY, ICatalogRepository } from '../../domain/ports/catalog.repository.port';
+import {
+  CATALOG_REPOSITORY,
+  ICatalogRepository,
+} from '../../domain/ports/catalog.repository.port';
 import { NotFoundError } from '../../../../shared/domain/errors/domain-error';
 import { CatalogDto } from '../dto/catalog.dto';
 
@@ -14,6 +17,11 @@ export class UpdateCatalogUseCase {
     if (!catalog) throw new NotFoundError('Catalog', id);
     catalog.updateName(name);
     await this.repo.save(catalog);
-    return new CatalogDto(catalog.id, catalog.name, catalog.status, catalog.parentId);
+    return new CatalogDto(
+      catalog.id,
+      catalog.name,
+      catalog.status,
+      catalog.parentId,
+    );
   }
 }

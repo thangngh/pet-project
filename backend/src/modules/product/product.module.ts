@@ -16,9 +16,14 @@ import { AddMediaUseCase } from './application/use-cases/add-media.use-case';
 import { RemoveMediaUseCase } from './application/use-cases/remove-media.use-case';
 import { ProductController } from './adapters/inbound/controllers/product.controller';
 import { CatalogDeletedHandler } from './application/handlers/catalog-deleted.handler';
+import { RequestContextModule } from '../../shared/adapters/request-context/request-context.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TypeOrmProduct]), CqrsModule],
+  imports: [
+    TypeOrmModule.forFeature([TypeOrmProduct], 'product'),
+    CqrsModule,
+    RequestContextModule,
+  ],
   controllers: [ProductController],
   providers: [
     { provide: PRODUCT_REPOSITORY, useClass: ProductRepository },
