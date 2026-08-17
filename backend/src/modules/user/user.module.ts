@@ -15,12 +15,14 @@ import { UserRegisteredHandler } from './application/handlers/user-registered.ha
 import { AuthModule } from '../auth/auth.module';
 import { AUTH_PASSWORD_PORT } from './application/ports/auth-password.port';
 import { AuthPasswordAdapter } from './adapters/outbound/auth/auth-password.adapter';
+import { RequestContextModule } from '../../shared/adapters/request-context/request-context.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([TypeOrmUserProfile, TypeOrmUserSession]),
     CqrsModule,
     AuthModule,
+    RequestContextModule,
   ],
   controllers: [UserController],
   providers: [
