@@ -22,6 +22,9 @@ than a list of fixes.
 
 - [ ] `docker compose up -d && pnpm migration:run && pnpm start:dev` produces a
       running API against a real database, from a clean clone
+- [ ] Four connection pools, four schemas, four migration histories — and
+      moving one context to its own database is a change of environment
+      variables only
 - [ ] The chain above returns 200 with the profile created by the
       `UserCreated` handler
 - [ ] `GET …/products` with no query string returns page 1 with 20 items, not
@@ -32,8 +35,8 @@ than a list of fixes.
 
 ## Scope
 
-**In:** identity propagation, global validation, migrations, database
-alignment, CI, formatting baseline, lockfile.
+**In:** identity propagation, global validation, per-context pools and
+migrations, database alignment, CI, formatting baseline, lockfile.
 
 **Out, deliberately:** RBAC and the role field (spec-002 — F05 must not be
 touched before F20), refresh tokens (spec-002), the gate 503 (spec-002),
@@ -41,10 +44,15 @@ outbox and subtree cascade (spec-003), route prefixes and documentation
 (spec-004). The endpoint paths in this spec keep their current double prefix;
 fixing that is D11 and needs your answer first.
 
-## Assumption — one database
+## Persistence shape (D4, ruled 2026-08-17)
 
-Written against **D4 option A**: one PostgreSQL service, one database. If you
-rule for three data sources, only §4 changes; §§1–3 and 5–7 are unaffected.
+One database now, **one connection pool per bounded context**, each context in
+its own PostgreSQL schema with its own migration history. Database-per-context
+is the destination; this slice builds the seam so that getting there is a
+change of environment variables, not of code.
+
+That ruling touches §3 and §4 below, and it is the largest single piece of work
+in this spec.
 
 ---
 
@@ -138,65 +146,172 @@ Removing it is D5, in spec-002.
 
 ---
 
-## 3. Migrations (D3 → F03)
+## 3. Migrations, one history per context (D3 → F03)
 
 ### Changes
 
-1. `backend/src/data-source.ts` — a `DataSource` for the TypeORM CLI, reading
-   the same env vars as `typeorm.module.ts`, with
-   `entities: ['src/**/*.entity.ts']` and `migrations: ['src/migrations/*.ts']`.
-2. `backend/src/migrations/<timestamp>-InitialSchema.ts` — generated, then read
-   before committing. It must create the five existing tables:
-   `users`, `user_profiles`, `user_sessions`, `catalogs`, `products`.
-3. `package.json` scripts:
+1. `backend/src/data-source.ts` — one CLI `DataSource` selected by a
+   `DB_CONTEXT` environment variable, reading the same per-context config as
+   §4 so the CLI and the application can never disagree:
 
-```json
-"migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts",
-"migration:run":      "typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
-"migration:revert":   "typeorm-ts-node-commonjs migration:revert -d src/data-source.ts"
+```ts
+const context = process.env.DB_CONTEXT;          // auth | user | catalog | product
+export default new DataSource({
+  type: 'postgres',
+  ...contextDbConfig(context),                    // same helper as app.config.ts
+  schema: context,
+  entities: [`src/modules/${context}/**/*.entity.ts`],
+  migrations: [`src/modules/${context}/**/migrations/*.ts`],
+  migrationsTableName: 'migrations',
+});
 ```
 
-4. `typeorm.module.ts`: add `migrations`, keep `migrationsRun: false` (running
-   migrations is an explicit step, not a side effect of boot), and drop the
-   `entities` glob — it points at `*.entity.ts` paths that do not exist in
-   `dist/`, and `autoLoadEntities: true` is what actually resolves entities
-   today. Removing dead configuration that appears to work is worth the two
-   lines it costs.
+2. Per-context migration directories, beside the adapters that own the tables:
+
+| Context | Directory | Tables |
+|---|---|---|
+| auth | `modules/auth/adapters/outbound/persistence/migrations/` | `users` |
+| user | `modules/user/adapters/outbound/persistence/migrations/` | `user_profiles`, `user_sessions` |
+| catalog | `modules/catalog/adapters/outbound/persistence/migrations/` | `catalogs` |
+| product | `modules/product/adapters/outbound/persistence/migrations/` | `products` |
+
+Each context's first migration begins with
+`CREATE SCHEMA IF NOT EXISTS "<context>"`, so a context creates its own schema
+and nothing outside it.
+
+3. `backend/scripts/migrate.mjs` — iterates the four contexts and invokes the
+   TypeORM CLI once per context, so one command covers the set:
+
+```json
+"migration:run":      "node scripts/migrate.mjs run",
+"migration:revert":   "node scripts/migrate.mjs revert --context <name>",
+"migration:generate": "node scripts/migrate.mjs generate --context <name>"
+```
+
+`run` iterates; `generate` and `revert` require an explicit context, because
+both are destructive to get wrong.
+
+4. `typeorm.module.ts`: `migrationsRun: false` on every data source — running
+   migrations is an explicit step, never a side effect of boot. Drop the
+   `entities` glob, which points at `*.entity.ts` paths that do not exist in
+   `dist/`; `autoLoadEntities: true` is what actually resolves entities today.
 
 `synchronize` stays false everywhere.
 
 ### Verification
 
-- `pnpm migration:run` against a clean database creates all five tables.
-- `pnpm migration:revert` drops them.
-- CI runs the migration before the e2e suite, so a missing migration for a new
-  entity fails the build rather than the deploy.
+- `pnpm migration:run` against a clean database creates four schemas, five
+  tables and four independent `migrations` tables.
+- `pnpm migration:revert --context catalog` reverts only the catalog schema and
+  leaves the other three untouched — this is the check that the histories are
+  genuinely independent, and the one that would catch a shared history hiding
+  behind four directories.
+- CI runs migrations before the e2e suite, so an entity change without a
+  migration fails the build rather than the deploy.
 
 ---
 
-## 4. Database alignment (D4 → F04)
+## 4. One pool per context (D4 → F04)
 
-*This is the section that changes if you rule against D4's recommendation.*
+### 4.1 Config — the fallback chain is the mechanism
 
-### Changes
+`app.config.ts` gains a helper and four blocks. The fallback is what makes a
+later split a configuration change:
 
-1. `docker-compose.yml`: replace `postgres_auth`, `postgres_user` and
-   `postgres_catalog` with one `postgres` service on 5432 serving
-   `${DB_DATABASE:-ddd_project}`, one volume, same healthcheck.
-2. `app.config.ts`: delete the unread `database.auth` and `database.user`
-   blocks.
-3. `.env.example` and `.env`: delete the `DB_AUTH_*`, `DB_USER_*` and
-   `DB_CATALOG_*` groups.
+```ts
+const contextDb = (prefix: string, schema: string) => ({
+  host:     process.env[`DB_${prefix}_HOST`]     ?? process.env.DB_HOST     ?? 'localhost',
+  port:     +(process.env[`DB_${prefix}_PORT`]   ?? process.env.DB_PORT     ?? 5432),
+  username: process.env[`DB_${prefix}_USERNAME`] ?? process.env.DB_USERNAME ?? 'postgres',
+  password: process.env[`DB_${prefix}_PASSWORD`] ?? process.env.DB_PASSWORD ?? 'postgres',
+  database: process.env[`DB_${prefix}_DATABASE`] ?? process.env.DB_DATABASE ?? 'ddd_project',
+  schema,
+  poolSize: +(process.env[`DB_${prefix}_POOL_SIZE`] ?? 10),
+});
 
-Deferred: schema-per-context. It buys visible boundaries but complicates every
-migration now, and buys nothing until a context is extracted. Recorded in D4,
-not built here.
+database: {
+  auth:    contextDb('AUTH',    'auth'),
+  user:    contextDb('USER',    'user'),
+  catalog: contextDb('CATALOG', 'catalog'),
+  product: contextDb('PRODUCT', 'product'),
+}
+```
+
+With no per-context variables set, all four resolve to the same server and
+database, each with its own pool and schema. Setting `DB_CATALOG_HOST` and
+`DB_CATALOG_DATABASE` moves Catalog to its own database — no code change.
+
+The existing `database.auth` and `database.user` blocks stop being dead
+configuration and become this. `catalog` and `product` are new.
+
+### 4.2 Four named data sources
+
+`shared/adapters/persistence/typeorm/typeorm.module.ts` registers one root per
+context instead of one for the application:
+
+```ts
+NestTypeOrmModule.forRootAsync({
+  name: 'catalog',
+  useFactory: (c: ConfigService) => ({
+    type: 'postgres',
+    ...c.get('app.database.catalog'),
+    autoLoadEntities: true,
+    synchronize: false,
+    migrationsRun: false,
+  }),
+  inject: [ConfigService],
+})
+```
+
+### 4.3 Every repository names its connection
+
+There is no default data source after this, so every registration and injection
+must name one. Five entities, four repositories, four modules:
+
+```ts
+TypeOrmModule.forFeature([TypeOrmCatalog], 'catalog')          // in CatalogModule
+@InjectRepository(TypeOrmCatalog, 'catalog')                    // in CatalogRepository
+```
+
+| Module | Connection | Entities |
+|---|---|---|
+| `AuthModule` | `auth` | `TypeOrmUserEntity` |
+| `UserModule` | `user` | `TypeOrmUserProfile`, `TypeOrmUserSession` |
+| `CatalogModule` | `catalog` | `TypeOrmCatalog` |
+| `ProductModule` | `product` | `TypeOrmProduct` |
+
+A missed name fails at container build, which `app.bootstrap.spec.ts` catches —
+that spec must be updated to override `getDataSourceToken(name)` and
+`getRepositoryToken(entity, name)` for all four connections.
+
+### 4.4 Compose
+
+- `docker-compose.yml` — one `postgres` service on 5432 serving
+  `${DB_DATABASE:-ddd_project}`, one volume, the existing healthcheck. This is
+  what runs today.
+- `docker-compose.multi-db.yml` — the per-context services, carried forward as
+  the target topology. Bringing one up and setting that context's `DB_*_*`
+  variables is the whole migration path for that context.
+
+### 4.5 What this deliberately makes impossible
+
+No cross-context join and no cross-context transaction. Both are now prevented
+by construction rather than by review, which is the point of the seam — and it
+is why D10's outbox stops being optional: after this, an outbox is the only
+correct way to make two contexts agree on anything.
 
 ### Verification
 
-`docker compose up -d` then `pnpm migration:run` then `pnpm start:dev` from a
-clean clone, following only `CLAUDE.md`. That path is currently broken at three
-separate points; the acceptance is that it works with no undocumented steps.
+- `docker compose up -d`, `pnpm migration:run`, `pnpm start:dev` from a clean
+  clone, following only `CLAUDE.md`. Currently broken at three separate points;
+  acceptance is that it works with no undocumented steps.
+- Four distinct pools observable in `pg_stat_activity`, grouped by
+  `application_name` — set `application_name` per data source so this is
+  checkable rather than assumed.
+- A smoke check that Catalog can be moved: point `DB_CATALOG_*` at a second
+  database, run `pnpm migration:run`, and confirm the catalog endpoints work
+  while the others stay on the first. This is the proof that the seam is real,
+  and it is the acceptance criterion that matters most in this section.
 
 ---
 
@@ -269,15 +384,22 @@ Each task ends green — build, tests, and the checks named.
 |---|------|-------------|
 | 1 | Delete `package-lock.json`; `lint` stops fixing; add `lint:fix` | `pnpm lint` reports without writing |
 | 2 | Formatting commit, alone | `pnpm lint` → 0 errors |
-| 3 | Collapse compose to one database; drop unread config (§4) | `docker compose up -d` healthy |
-| 4 | `data-source.ts`, initial migration, scripts (§3) | `migration:run` then `revert` on a clean database |
-| 5 | Identity in `JwtAuthGuard` (§1) | Guard unit test |
-| 6 | Global `ValidationPipe`; delete the custom pipe (§2) | DTO unit tests; `app.bootstrap.spec.ts` still resolves |
-| 7 | e2e suite (§6) | The seven assertions |
-| 8 | CI workflow (§5) | The workflow passes on its own pull request |
+| 3 | Compose: one `postgres`, plus the multi-db file (§4.4) | `docker compose up -d` healthy |
+| 4 | Per-context config with the fallback chain (§4.1) | Unit test: unset vars → shared database, distinct schemas |
+| 5 | Four named data sources; every repository names its connection (§4.2, §4.3) | `app.bootstrap.spec.ts` resolves with four connections overridden |
+| 6 | Per-context migrations and `scripts/migrate.mjs` (§3) | `migration:run`, then `revert --context catalog` touches only catalog |
+| 7 | Identity in `JwtAuthGuard` (§1) | Guard unit test |
+| 8 | Global `ValidationPipe`; delete the custom pipe (§2) | DTO unit tests; container still resolves |
+| 9 | e2e suite (§6) | The seven assertions |
+| 10 | CI workflow (§5) | The workflow passes on its own pull request |
+| 11 | Move-a-context smoke check (§4.5) | Catalog on a second database, others unmoved |
 
-Order matters in two places: 2 before everything else so no later diff carries
-formatting noise, and 4 before 7 because the e2e suite needs a schema.
+Order matters in three places: 2 before everything else so no later diff
+carries formatting noise; 5 before 6, because migrations need the data sources
+they run against; 6 before 9, because the e2e suite needs a schema.
+
+Tasks 4–6 are the bulk of this slice. They are also the only tasks that are
+cheaper now than after another context is added.
 
 ## Risks
 
@@ -288,6 +410,9 @@ formatting noise, and 4 before 7 because the e2e suite needs a schema.
 | Generated migration does not match hand-written entity intent | medium | Read the generated SQL before committing; never commit a generated migration unread |
 | Compose change wipes local data | low | Volumes are renamed, not reused; `docker compose down -v` first |
 | Identity mapping wrong for a future API-key path | low | `authMethod` is explicit; D12 removes the unbuilt API-key port |
+| A repository misses its connection name and silently uses the wrong pool | **medium** | There is no default connection, so a missed name cannot resolve — it fails at container build, caught by `app.bootstrap.spec.ts` |
+| Connection exhaustion: 4 pools × 10 against PostgreSQL's default 100 | low | Sized in config, not left to the driver; CI runs a smaller pool |
+| Migration histories drift into a shared one behind four directories | medium | Task 6's acceptance is a per-context revert, which fails if the histories are not independent |
 
 ## Rollback
 

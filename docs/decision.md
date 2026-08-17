@@ -15,7 +15,7 @@ after.
 | D1 | Copy identity into `RequestContext` from the JWT guard | F01 | proposed | yes |
 | D2 | Register Nest's built-in `ValidationPipe` globally; delete the custom one | F02, F10 | proposed | yes |
 | D3 | TypeORM migrations, never `synchronize` outside tests | F03 | proposed | yes |
-| D4 | One database, not three | F04 | **needs your call** | costly |
+| D4 | One database now, one pool per context, multi-database as the target | F04 | **accepted** | yes, by design |
 | D5 | Remove `role` from public registration before enabling RBAC | F20, F05 | proposed | yes |
 | D6 | Enforce password strength in the value object, not only the DTO | F06, F15 | proposed | yes |
 | D7 | `GateException` extends `HttpException` with 503 | F07 | accepted | yes |
@@ -144,9 +144,9 @@ was written against.
 
 ---
 
-## D4 — One database, not three — **needs your call**
+## D4 — One database now, one pool per context, multi-database as the target
 
-**Closes** F04. **Status** needs your decision.
+**Closes** F04. **Status** accepted — your ruling, 2026-08-17.
 
 ### Context
 
@@ -155,31 +155,61 @@ ports. The application opens exactly one `DataSource` and points it at a fourth
 database name that no service creates. `app.config.ts` carries per-context
 blocks nothing reads.
 
-Somebody intended database-per-context. The code went the other way. Neither
-half is wrong on its own; they simply do not describe the same system.
+The infrastructure design already chose database-per-context. The code never
+followed. That makes this a question of sequencing, not direction.
 
-### Options
+### Decision
 
-| | Approach | Cost | Consequence |
-|---|---|---|---|
-| A | One `postgres` service, one database | small | Contexts share a schema. Cross-context joins become possible — and nothing stops someone writing one |
-| B | Three data sources, one per context | large | Every module wires its own connection; no cross-context transaction; the outbox needs one table per database |
+Run **one database now, reached through one connection pool per bounded
+context**, with each context's tables in its own PostgreSQL schema. Treat
+database-per-context as the destination, and make the move a configuration
+change rather than a rewrite.
 
-### Recommendation
+Four named TypeORM data sources — `auth`, `user`, `catalog`, `product` — each
+with its own pool, its own schema and its own migration history. Each one reads
+a per-context config block that **falls back to the shared `DB_*` values when
+its own are unset**:
 
-**A**, for now. The system is a monolith with four contexts, no context has been
-extracted, and B's main benefit — independent deployment and scaling — cannot be
-collected until one is. B also multiplies D10's outbox work by three.
+```
+DB_CATALOG_HOST  ?? DB_HOST
+DB_CATALOG_PORT  ?? DB_PORT
+DB_CATALOG_DATABASE ?? DB_DATABASE
+```
 
-The isolation B protects can be kept cheaply under A by keeping each context's
-tables in its own PostgreSQL schema, so the boundary is visible and a later
-split is a schema move rather than a rewrite.
+Unset, every context lands on the same database with a distinct pool and
+schema. Set `DB_CATALOG_*` and start a second PostgreSQL, and the Catalog
+context moves out — no code change, no migration rewrite, no repository touched.
 
-### Why this needs you
+The three compose services stay as the target topology in a second file; the
+default compose file serves the one database that runs today.
 
-It is the one decision here that is expensive to reverse and reflects intent I
-cannot read from the code. The compose file says someone wanted separation. If
-that is a near-term goal, say so and I will spec B instead.
+### Why this rather than a single shared pool
+
+A single pool would be less machinery, but it would make the eventual split a
+refactor instead of an environment variable. Since the destination is already
+decided, the cheap moment to pay for the seam is before four contexts have
+grown cross-schema queries — after that, every one of them is a migration
+problem.
+
+Separate pools also stop one context's slow queries from starving another's,
+which is real today and independent of any split.
+
+### Consequences
+
+- **No cross-context transaction, and no cross-context join.** That is the
+  point of the seam, and it is enforced by construction rather than by review.
+  It also raises the value of D10: the outbox is the only correct way to make
+  two contexts agree, and it becomes one `outbox_messages` table per schema.
+- Every `@InjectRepository(X)` must name its connection. There is no default
+  data source any more — a missed name fails at container build, which
+  `app.bootstrap.spec.ts` catches.
+- Migration history is per context. Splitting a context out later is
+  `pg_dump -n <schema>` and a restore, not a disentangling.
+- Four pools of connections against one server. At a default pool size of 10
+  that is 40 of PostgreSQL's default 100 — comfortable, but it needs sizing in
+  config rather than being left to the driver's default.
+- `app.config.ts`'s per-context blocks stop being dead configuration and become
+  the mechanism. They gain `catalog` and `product` to match.
 
 ---
 
@@ -348,12 +378,20 @@ it after the P0 and P1 work**, for a reason worth stating plainly: an outbox is
 a durability mechanism for a system that runs. Until D1–D4 land, there is no
 running system to make durable, and no way to test that the outbox works.
 
-Shape, to be specified properly in its own spec once D4 is settled:
+Shape, now that D4 is settled — one `outbox_messages` table **per context
+schema**, not one shared table, because a context that later moves to its own
+database must take its outbox with it:
 
-- `outbox_messages` written in the same transaction as the aggregate
-- a poller publishes to the existing bus and marks messages dispatched
+- `outbox_messages` written in the same transaction as the aggregate, on that
+  context's own data source
+- a poller per context publishes to the existing bus and marks messages
+  dispatched
 - consumers made idempotent — an inbox table, or naturally idempotent handlers
   (`archiveByCatalogId` already is; profile creation is not)
+
+D4 raises the stakes here rather than lowering them: with one pool per context
+and no cross-context transaction, the outbox stops being a durability upgrade
+and becomes the only correct way for two contexts to agree on anything.
 
 ### Why it is not first
 
@@ -475,16 +513,16 @@ code to match a document is not worth doing while the API returns 401.
 | **spec-003** | D9, D10 | Durability and the cascade. Needs a database to be worth testing |
 | **spec-004** | D11, D12, D14 | Surface and records. D11 waits on your answer |
 
-Only spec-001 is written now. It proceeds on D4's recommendation — one database
-— and isolates that assumption in a single section, so ruling the other way
-changes that section and nothing else. spec-004 waits on D11 outright, because
-there is no version of it that does not change every path.
+Only spec-001 is written now, and it now builds D4 as ruled: one database, four
+pools, four schemas, four migration histories. spec-004 waits on D11 outright,
+because there is no version of it that does not change every path.
 
 ## Open questions for you
 
-1. **D4** — one database or three? I recommend one. Compose says someone wanted
-   three.
-2. **D11** — is anything calling this API today? If yes, the prefix fix needs a
+1. **D11** — is anything calling this API today? If yes, the prefix fix needs a
    deprecation window rather than a rename.
-3. **D5** — does anything you use register an admin through the public endpoint?
+2. **D5** — does anything you use register an admin through the public endpoint?
    If so, the seed lands before the field is removed.
+
+Answered: **D4** — one database, one pool per context, multi-database as the
+target (2026-08-17).
