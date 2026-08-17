@@ -35,7 +35,11 @@ export class UserRepository implements IUserRepository {
   async save(user: User): Promise<void> {
     const entity = this.toPersistence(user);
     await this.repo.save(entity);
-    user.clearEvents();
+
+    // Deliberately does NOT clear the aggregate's events. The use case
+    // publishes them after this returns and clears them itself; clearing here
+    // emptied the array first, so every UserCreated event was silently
+    // dropped and no profile was ever created.
   }
 
   async delete(id: UserId): Promise<void> {
